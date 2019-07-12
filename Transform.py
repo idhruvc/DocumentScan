@@ -3,9 +3,9 @@ import numpy as np
 from matplotlib import pyplot as plt
 import imutils
 from skimage.filters import threshold_local
+import sys
 
-
-def order_points(pts):
+def orderPoints(pts):
 	# initialzie a list of coordinates that will be ordered
 	# such that the first entry in the list is the top-left,
 	# the second entry is the top-right, the third is the
@@ -38,10 +38,10 @@ def findCentroid(points):
 	return (x,y)
 
 
-def four_point_transform(image, pts):
+def transformFromPoints(image, pts):
 	# obtain a consistent order of the points and unpack them
 	# individually
-	rect = order_points(pts)
+	rect = orderPoints(pts)
 #TODO figure out if i want to do this centroid stuff vvv TODO
 	#find the centroid of the quadrilateral in order to dilate quadrilateral around centroid
 	centroid = findCentroid(rect)    
@@ -91,58 +91,65 @@ def removeBorder(image):
 	orig = image.copy()
 	image = imutils.resize(image, height = 500)
 	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-	gray = cv2.GaussianBlur(gray, (3,3), 1)
+	gray = cv2.GaussianBlur(gray, (11,11), 0)
 	#locate contours and features, this will be used to find the outline of the document
-	edged = cv2.Canny(gray, 50, 300, 3)
-	element = cv2.getStructuringElement(cv2.MORPH_RECT, (10,10), (5,5))
+	edged = cv2.Canny(gray, 0, 150)
+	element = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3), (1,1))
 	edged =	cv2.morphologyEx(edged, cv2.MORPH_CLOSE, element)
 		
 	#TODO remove -- image display for debug
-	cv2.imshow("Edged", imutils.resize(edged, width=500))
-	cv2.waitKey(0)
-	cv2.destroyAllWindows()
+#	cv2.imshow("Edged", imutils.resize(edged, height=500))
+#	cv2.waitKey(0)
+#	cv2.destroyAllWindows()
 		
 	cnts = cv2.findContours(edged.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
 	cnts = imutils.grab_contours(cnts)
 	cnts = sorted(cnts, key=cv2.contourArea, reverse = True)[:5]	
 	
 	#approximate the contour with a polygon	
-	for c in cnts:
-		peri = cv2.arcLength(c, True)
-		approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-#		cv2.drawContours(image, approx, -1, (0,255,0),3)
-#		cv2.imshow("approx", image)
-#		cv2.waitKey(0)
-#		cv2.destroyAllWindows()
-		#if approximated contour has 4 points, assuming the ID is the subject of the image,
-		#it should be the bounding box for the ID in the original image
-		if len(approx) == 4:
-			screenCnt = approx
-			break
-	try:	
-		warped = four_point_transform(orig, screenCnt.reshape(4,2) * ratio)
-	except: # bounding polygon could not be found, just return original image
-		warped = orig	
-
-#	c = cnts[0]
+	c = cnts[0]
+	peri = cv2.arcLength(c, True)
+	approx = cv2.approxPolyDP(c, 0.05 * peri, True)
+	
+	#TODO remove  this vv --debug--
 #	copy = image.copy()
-#	rect = cv2.minAreaRect(c)
-#	box = cv2.boxPoints(rect)
-#	box = np.int0(box)
-#	cv2.drawContours(copy, [box],0,(0,0,255),2)
-#	cv2.imshow("Bounding Box", imutils.resize(copy,width=500))
+#	cv2.drawContours(copy, approx, -1, (0,255,0),3)
+#	cv2.imshow("approx", copy)
 #	cv2.waitKey(0)
 #	cv2.destroyAllWindows()
 
-	#TODO remove -- image display for debug
-	cv2.imshow("Warped", imutils.resize(warped, width=500))
+	#if approximated contour has 4 points, assuming the ID is the subject of the image,
+	#it should be the bounding box for the ID in the original image
+	
+	if len(approx) == 4:
+		screenCnt = approx
+	try:	
+		warped = transformFromPoints(orig, screenCnt.reshape(4,2) * ratio)
+	except: # bounding polygon could not be found, just return original image
+		warped = orig	
+
+	copy = image.copy()
+	rect = cv2.minAreaRect(c)
+	box = cv2.boxPoints(rect)
+	box = np.int0(box)
+	cv2.drawContours(copy, [box],0,(0,0,255),2)
+	cv2.imshow("Bounding Box", imutils.resize(copy,width=500))
 	cv2.waitKey(0)
-	cv2.destroyAllWindows()	
+	cv2.destroyAllWindows()
+
+	#TODO remove -- image display for debug
+#	cv2.imshow("Warped", imutils.resize(warped, height=500))
+#	cv2.waitKey(0)
+#	cv2.destroyAllWindows()	
 
 	return warped
 
 
-#SRC = "/Users/ngover/Documents/TestPrograms/Images/Texas/V/"
+#SRC = "/Users/ngover/Documents/TestPrograms/Images/Texas/H/"
 ##imread
-#img = cv2.imread(SRC + "TX_V_test9.png")
+#img = cv2.imread(SRC + "TX_H_test16.png")
+#if img.any() == None:
+#	print("File not found.")
+#	sys.exit(0)
+
 #img = removeBorder(img)
