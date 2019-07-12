@@ -28,12 +28,12 @@ class TX_H:
 	orientation = "HORIZONTAL"
 	# TODO
 
-class OR_V:
-	state = "OREGON"
-	orientation = "VERTICAL"
-	# TODO
+# TODO don't know if oregon has a vertical template? class OR_H2 TODO
 
 class OR_H:
 	state = "OREGON"
 	orientation = "HORIZONTAL"
-	# TODO
+	dob = ((633,308), (1025,353))
+	first = ((635,306), (1023, 350))
+	last = ((0,0), (0,0)) # TODO
+	address = ((36, 779), (611,873))

@@ -5,49 +5,36 @@ import os
 from PIL import Image, ImageOps
 import TemplateData as templates
 import Document as document
-#import Transform as transform
+import Transform as transform
 from unidecode import unidecode
 import cv2
 import sys
 
 # TODO -- GOALS -- TODO
 # 1. Better Template
-# 2. More Testing Data
 # 3. Improve OCR
 # 4. Improve Alignment
 # 5. Improve Pre-Screen
 
 #global variable declaration
-MAX_FEATURES = 800
-GOOD_MATCH_PERCENT = .125
+GOOD_MATCH_PERCENT = .08
 SRC_PATH = "/Users/ngover/Documents/TestPrograms/Images/"
-IMG = "TX_V_annie.jpg"
-#TEMPLATE = "Templates/TX_V_template_edited.png"
+IMG = "Texas/V/TX_V_test14.png"
 BLUR_THRESHOLD = 15 # TODO mess around with this
 DARKNESS_THRESHOLD = 50 # TODO mess with this
-CHARACTER_WHITELIST = """-c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/-"""
+CHARACTER_WHITELIST = "-c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/-"
 
 #start of main
 def main():
         # read the images
         try:
 		img = cv2.imread(SRC_PATH + IMG)
-#		template = cv2.imread(SRC_PATH + TEMPLATE)
 	except IOError as e:
                 print("({})".format(e))
-
-	#prescreen
-	result = preScreen(img)
-	if result != "":
-		print("Image is {} ".format(result))
-		sys.exit(0)
 
 	#display results
 	myDoc = buildDocument(img)
 	print("\n" + myDoc.__str__())
-#	cv2.imshow("Best Match Template", imutils.resize(matchToTemplate(img), width=400))
-#	cv2.waitKey(0)
-#	cv2.destroyAllWindows()
 #end of main
 
 
@@ -61,7 +48,7 @@ def preScreen(img):
 	
 	#check whether the value is above or beneath the threshold for blur
 	if focusMeasure < BLUR_THRESHOLD:
-		return "too blurry."
+		return False
 
 	#measure the mean darkness of the image
 	light = np.mean(img)
@@ -69,32 +56,39 @@ def preScreen(img):
 	print("Darkness level: {}".format(light))	
 
 	if light < DARKNESS_THRESHOLD:
-		return "too dark."
+		return False
 
-	return ""
+	return True
+#end of preScreen
 
 
 #start of alignImages
+#	This function uses takes an image and the template it has been matched to, identifies the areas
+#	of the image that correspond, and calculates the homography (essentially the relationship between
+#	two perspectives of the same image, takes into account rotation and translation) using the cv2.findHomography()
+#	method. The template and the original image are assumed to be the same image related by this homography, which
+#	is used to warp the perspective of the input image so that it aligns with the template. Returns the input image,
+#	aligned to the template.
 def alignImages(img, template):
 	#image prep to improve OCR and alignment
 	imgClean = cleanImage(img)
 	templateClean = cleanImage(template)
-		
-	# Detect ORB keypoints
-	orb = cv2.ORB_create(MAX_FEATURES)
-	imgKeypoints, imgDescriptors = orb.detectAndCompute(imgClean, None)
-	templateKeypoints, templateDescriptors = orb.detectAndCompute(templateClean, None)
+
+	# Detect image keypoints & descriptors using the AKAZE algorithm
+	akaze = cv2.AKAZE_create()
+	imgKeypoints, imgDescriptors = akaze.detectAndCompute(imgClean, None)
+	templateKeypoints, templateDescriptors = akaze.detectAndCompute(templateClean, None)
 	
-	# Match features
+	# Match corresponding features between the images
 	descriptorMatcher = cv2.DescriptorMatcher_create(cv2.DESCRIPTOR_MATCHER_BRUTEFORCE_HAMMING)
 	matches = descriptorMatcher.match(imgDescriptors, templateDescriptors, None)
 	
-	# Sort matches by score, only pull the best matches
-	matches.sort(key=lambda x: x.distance, reverse=False)
+	# Sort matches by score, and we only want to care about the best x% of matches.
+	matches.sort(key=lambda m: m.distance, reverse=False)
 	numGoodMatches = int(len(matches) * GOOD_MATCH_PERCENT)
 	matches = matches[:numGoodMatches]
 	
-	# Pull location of good matches
+	# Pull the coordinates of the best matches
 	imgPoints = np.zeros((len(matches), 2), dtype=np.float32)
 	templatePoints = np.zeros((len(matches), 2), dtype=np.float32)
 	
@@ -105,7 +99,7 @@ def alignImages(img, template):
 	# find homography
 	h, mask = cv2.findHomography(imgPoints, templatePoints, cv2.RANSAC)
 	
-	# apply homography
+	# apply homography, warping the image to appear as if it were directly below the camera.
 	height, width, channels = template.shape
 	imgAligned = cv2.warpPerspective(img, h, (width, height))
 	return imgAligned
@@ -113,6 +107,8 @@ def alignImages(img, template):
 
 
 #start of drawBoxes
+#	This function is mostly for demonstration/debugging purposes. It references the ID's template data to
+#	draw boxes around the regions it is reading text from.
 def drawBoxes(img):
 	# coordinates of each field are stored as a tuple in the corresponding class for the DL
 	# dob
@@ -127,9 +123,12 @@ def drawBoxes(img):
 #end of drawBoxes
 
 
-#start of findData
+#start of getText
+#	This function is passed an image, or ROI, from which we will extract the text. It expects the image
+#	to only contain the data, because all text inside the ROI will be read and converted to a string
+#	TODO -- Make this more robust... perhaps tweak this to be more dynamic so that it can solve the OK ID prob?
 def getText(roi):
-	# prep image for text recognition
+	# prep image w/ resize, color convert, noise reduction & threshold.
 	roi = cv2.resize(roi,None,fx=1,fy=1.5,interpolation=cv2.INTER_CUBIC)
 	roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY) 
 	roi = cv2.GaussianBlur(roi, (1,3), 0)
@@ -141,10 +140,13 @@ def getText(roi):
 	result = pytesseract.image_to_string(Image.open(SRC_PATH + "temp.jpg"), lang='eng', config=CHARACTER_WHITELIST)
 	os.remove(SRC_PATH + "temp.jpg")
 	return unidecode(result)
-#end of findData
+#end of getText
 
 
 #start of cleanImage
+#	This function optomizes an image before it is passed to one of the openCV matching/alignment
+#	methods. The function first converts the image to greyscale, then performs a noise reduction thru use
+#	of gaussian blur and dilation/erosion
 def cleanImage(img):
 	kernel = np.ones((3,3), np.uint8)
         # img prep (color, blur correction, noise removal)
@@ -153,22 +155,28 @@ def cleanImage(img):
 	imgClean = cv2.dilate(imgClean, kernel, iterations=1)
 	imgClean = cv2.erode(imgClean, kernel, iterations=1)
 	return imgClean
+#end of cleanImage
+
 
 #start of buildDocument
+#	This function serves as a driver, first by calling the function to match the image to the best template,
+#	then aligning the image to the template, then pulling the data from the ID by referencing the location
+#	of the bounding boxes which are expected to contain the text we are interested in.
 def buildDocument(img):
-	#call to removeBorder, removes border from image and warps perspective
-	#TODO remove this --	img = transform.removeBorder(img)	
+	#call to removeBorder, removes border from image and warps perspective if edges can be detected
+	#removeBorder() will not modify the image if it cannot find a rectangular object.
+	imgNoBorder = transform.removeBorder(img)	
+	
+	#prescreen
+	result = preScreen(imgNoBorder)
+	if result == False:
+		print("Image quality too low.")
+		sys.exit(0)
+
 	#search for best template match
-	template, docType = matchToTemplate(img)
+	template, docType = matchToTemplate(imgNoBorder)
 	#call to alignImages, aligns image to the best template match
 	imReg = alignImages(img, template)
-
-	#TODO -- remove this, this is for testing/debugging
-	cv2.imshow("Original", imutils.resize(img, height=500))
-	cv2.imshow("Template", imutils.resize(template, height=500))
-	cv2.imshow("Aligned to Template", imutils.resize(drawBoxes(imReg), height=500))
-	cv2.waitKey(0)
-	cv2.destroyAllWindows()
 	
 	if docType.startswith("SS"): # social security card, process as such	
 		# TODO
@@ -198,12 +206,23 @@ def buildDocument(img):
 		#retrieve DOB coordinates from template, get text from image, assign to object
 		coords = getattr(templateData, "dob")
 		myDoc.dob= getText(imReg[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]])
+
+	#TODO remove -- display for debugging/testing
+	cv2.imshow("Original", imutils.resize(img, height=500))
+	cv2.imshow("Template", imutils.resize(template, height=500))
+	cv2.imshow("Warped", imutils.resize(drawBoxes(imReg), height=500))
+	cv2.waitKey(0)
+	cv2.destroyAllWindows()
 	
 	return myDoc
 #end of buildDocument
 	
 
 #start of matchToTemplate
+#	This function takes an input BGR image and searches through the templates folder, attempts to match a template
+#	to the image, and keeps track of the score of the match (a score of 1 is best). At the end of the loop, the
+#	function returns the best match it found, along with the state & orientation of the document (i.e. TX_V for
+#	a vertical TX ID).
 def matchToTemplate(img):
 	#set to gray
 	grayImg = cleanImage(img)
@@ -212,12 +231,25 @@ def matchToTemplate(img):
 	#loop through all the templates in the TEMPLATE src folder
 	for filename in os.listdir(SRC_PATH + "Templates/"):
 		if filename.endswith(".png") or filename.endswith(".jpg"): #All the templates expected to be jpg/png files
-			template = cv2.imread(SRC_PATH + "Templates/" + filename)
+			template = cv2.imread(SRC_PATH + "Templates/" + filename)			
 			grayTemplate = cleanImage(template)
+
+			#make sure sized appropriately before pass to function, if template height/width > image height/width,
+			#cv2.matchTemplate will throw exception.
+			imgHeight, imgWidth = grayImg.shape
+			tempHeight, tempWidth = grayTemplate.shape
+
+			if(imgHeight > tempHeight):
+				grayImg = imutils.resize(grayImg, height=tempHeight - 10)
+			imgHeight, imgWidth = grayImg.shape
+
+			if(imgWidth > tempWidth):
+				grayImg = imutils.resize(grayImg, width=tempWidth - 10)
+
 			#Try to find match
-			match = cv2.matchTemplate(grayImg, grayTemplate, cv2.TM_CCOEFF_NORMED)
+			match = cv2.matchTemplate(grayImg, grayTemplate, cv2.TM_CCORR_NORMED)
 			minVal,maxVal,minLoc,maxLoc = cv2.minMaxLoc(match)
-			print("Filename: {}, maxVal: {}".format(filename, maxVal))	
+			print("Filename: {}, maxVal: {}, minVal: {}".format(filename, maxVal, minVal))	
 			if maxVal >= bestMatch:
 				bestMatch = maxVal
 				bestTemplate = template
@@ -229,4 +261,4 @@ def matchToTemplate(img):
 		
 
 if __name__ == "__main__":
-    main()
+    main()	

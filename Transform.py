@@ -44,12 +44,12 @@ def four_point_transform(image, pts):
 	rect = order_points(pts)
 #TODO figure out if i want to do this centroid stuff vvv TODO
 	#find the centroid of the quadrilateral in order to dilate quadrilateral around centroid
-#	centroid = findCentroid(rect)    
+	centroid = findCentroid(rect)    
 
 	#dilate each point while keeping the quadrilateral centered around the centroid
-#	for pt in rect:
-#		pt[0] = centroid[0] + 1.2 * (pt[0] - centroid[0])
-#		pt[1] = centroid[1] + 1.2 * (pt[1] - centroid[1]) 
+	for pt in rect:
+		pt[0] = centroid[0] + 1.1 * (pt[0] - centroid[0])
+		pt[1] = centroid[1] + 1.1 * (pt[1] - centroid[1]) 
 	
 	(tl, tr, br, bl) = rect
  
@@ -91,9 +91,9 @@ def removeBorder(image):
 	orig = image.copy()
 	image = imutils.resize(image, height = 500)
 	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-	gray = cv2.GaussianBlur(gray, (5,5), 1)
+	gray = cv2.GaussianBlur(gray, (3,3), 1)
 	#locate contours and features, this will be used to find the outline of the document
-	edged = cv2.Canny(gray, 10, 200, apertureSize=3)
+	edged = cv2.Canny(gray, 50, 300, 3)
 	element = cv2.getStructuringElement(cv2.MORPH_RECT, (10,10), (5,5))
 	edged =	cv2.morphologyEx(edged, cv2.MORPH_CLOSE, element)
 		
@@ -102,33 +102,37 @@ def removeBorder(image):
 	cv2.waitKey(0)
 	cv2.destroyAllWindows()
 		
-	cnts = cv2.findContours(edged.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+	cnts = cv2.findContours(edged.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
 	cnts = imutils.grab_contours(cnts)
 	cnts = sorted(cnts, key=cv2.contourArea, reverse = True)[:5]	
-
-	#TODO remove everything from here till next comment -- image display for debug
-	i = 0
-	for c in cnts:
-		copy = image.copy()
-		x,y,w,h = cv2.boundingRect(c)
-		cv2.rectangle(copy, (x,y), (x+w, y+h), (0, 0, 255), 2)
-		cv2.drawContours(copy, cnts, i, (255,0,0), 2)
-		cv2.imshow("Contours", imutils.resize(copy, width=500))
-		cv2.waitKey(0)
-		cv2.destroyAllWindows()
-		i+= 1
 	
-	#approximate the contour	
+	#approximate the contour with a polygon	
 	for c in cnts:
-		peri = cv2.arcLength(c, False)
-		approx = cv2.approxPolyDP(c, 0.015 * peri, False)
+		peri = cv2.arcLength(c, True)
+		approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+#		cv2.drawContours(image, approx, -1, (0,255,0),3)
+#		cv2.imshow("approx", image)
+#		cv2.waitKey(0)
+#		cv2.destroyAllWindows()
 		#if approximated contour has 4 points, assuming the ID is the subject of the image,
 		#it should be the bounding box for the ID in the original image
 		if len(approx) == 4:
 			screenCnt = approx
 			break
+	try:	
+		warped = four_point_transform(orig, screenCnt.reshape(4,2) * ratio)
+	except: # bounding polygon could not be found, just return original image
+		warped = orig	
 
-	warped = four_point_transform(orig, screenCnt.reshape(4,2) * ratio)
+#	c = cnts[0]
+#	copy = image.copy()
+#	rect = cv2.minAreaRect(c)
+#	box = cv2.boxPoints(rect)
+#	box = np.int0(box)
+#	cv2.drawContours(copy, [box],0,(0,0,255),2)
+#	cv2.imshow("Bounding Box", imutils.resize(copy,width=500))
+#	cv2.waitKey(0)
+#	cv2.destroyAllWindows()
 
 	#TODO remove -- image display for debug
 	cv2.imshow("Warped", imutils.resize(warped, width=500))
@@ -138,20 +142,7 @@ def removeBorder(image):
 	return warped
 
 
-#start of cleanImage
-def cleanImage(img):
-	kernel = np.ones((3,3), np.uint8)
-        # img prep (color, blur correction, noise removal)
-	imgClean = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-	imgClean = cv2.GaussianBlur(imgClean, (3,9), 15) 
-	imgClean = cv2.dilate(imgClean, kernel, iterations=1)
-	imgClean = cv2.erode(imgClean, kernel, iterations=1)
-	return imgClean
-#end of cleanImage
-
-
-
-SRC = "/Users/ngover/Documents/TestPrograms/Images/"
-#imread
-img = cv2.imread(SRC + "TX_V_unaligned.png")
-img = removeBorder(img)
+#SRC = "/Users/ngover/Documents/TestPrograms/Images/Texas/V/"
+##imread
+#img = cv2.imread(SRC + "TX_V_test9.png")
+#img = removeBorder(img)
