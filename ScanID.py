@@ -17,10 +17,10 @@ import sys
 # 5. Improve Pre-Screen
 
 #global variable declaration
-GOOD_MATCH_PERCENT = .08
+GOOD_MATCH_PERCENT = .125
 SRC_PATH = "/Users/ngover/Documents/TestPrograms/Images/"
-IMG = "Texas/V/TX_V_test14.png"
-BLUR_THRESHOLD = 15 # TODO mess around with this
+IMG = "Texas/H/TX_H_test19.png"
+BLUR_THRESHOLD = 50 # TODO mess around with this
 DARKNESS_THRESHOLD = 50 # TODO mess with this
 CHARACTER_WHITELIST = "-c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/-"
 
@@ -39,8 +39,12 @@ def main():
 
 
 #start of preScreen()
+#	TODO -- I'd like to make this more robust
+#	This function performs a very simple prelim check on the image before template match/align is attempted. It
+#	takes the result from the call to removeBorder() and measures the darkness and blur of the image. If one of
+#	these values is too low, the method returns false to the calling function. Else, returns true
 def preScreen(img):
-	#convert image to greyscale, compute the focus measure of the image
+	#convert image to greyscale, get the variance of laplacian distribution
 	gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 	focusMeasure = cv2.Laplacian(gray, cv2.CV_64F).var()
 	
@@ -109,16 +113,21 @@ def alignImages(img, template):
 #start of drawBoxes
 #	This function is mostly for demonstration/debugging purposes. It references the ID's template data to
 #	draw boxes around the regions it is reading text from.
-def drawBoxes(img):
+def drawBoxes(img, docType):
+	templateData = getattr(templates, docType)
 	# coordinates of each field are stored as a tuple in the corresponding class for the DL
 	# dob
-	cv2.rectangle(img, templates.TX_V.dob[0], templates.TX_V.dob[1], (0,255,0), 20)
+	coords = getattr(templateData, "dob")
+	cv2.rectangle(img, coords[0], coords[1], (0,255,0), 3)
 	# Last
-	cv2.rectangle(img, templates.TX_V.last[0], templates.TX_V.last[1], (0,255,0), 20)
+	coords = getattr(templateData, "last")
+	cv2.rectangle(img, coords[0], coords[1], (0,255,0), 3)
 	# First
-	cv2.rectangle(img, templates.TX_V.first[0], templates.TX_V.first[1], (0,255,0), 20)
+	coords = getattr(templateData, "first")
+	cv2.rectangle(img, coords[0], coords[1], (0,255,0), 3)
 	# address
-	cv2.rectangle(img, templates.TX_V.address[0], templates.TX_V.address[1], (0,255,0), 20)	
+	coords = getattr(templateData, "address")
+	cv2.rectangle(img, coords[0], coords[1], (0,255,0), 3)	
 	return img
 #end of drawBoxes
 
@@ -128,17 +137,24 @@ def drawBoxes(img):
 #	to only contain the data, because all text inside the ROI will be read and converted to a string
 #	TODO -- Make this more robust... perhaps tweak this to be more dynamic so that it can solve the OK ID prob?
 def getText(roi):
-	# prep image w/ resize, color convert, noise reduction & threshold.
-	roi = cv2.resize(roi,None,fx=1,fy=1.5,interpolation=cv2.INTER_CUBIC)
-	roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY) 
-	roi = cv2.GaussianBlur(roi, (1,3), 0)
-	roi = cv2.threshold(roi, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)[1]
-	#add a white border to the image to make it easier for OCR
-	roi = cv2.copyMakeBorder(roi, 500, 500, 500, 500, cv2.BORDER_CONSTANT, value=255)	  
-	# create temp file for the roi, then open, read, and close.
-	cv2.imwrite(SRC_PATH + "temp.jpg", roi)
-	result = pytesseract.image_to_string(Image.open(SRC_PATH + "temp.jpg"), lang='eng', config=CHARACTER_WHITELIST)
-	os.remove(SRC_PATH + "temp.jpg")
+	try:
+		# prep image w/ resize, color convert, noise reduction & threshold.
+		roi = cv2.resize(roi,None,fx=1,fy=1.5,interpolation=cv2.INTER_CUBIC)
+		roi = imutils.resize(roi, height=500)
+		roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY) 
+		roi = cv2.GaussianBlur(roi, (3,3), 0)
+		roi = cv2.threshold(roi, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)[1]
+		#add a white border to the image to make it easier for OCR
+		roi = cv2.copyMakeBorder(roi, 500, 500, 500, 500, cv2.BORDER_CONSTANT, value=255)
+		
+		# create temp file for the roi, then open, read, and close.
+		cv2.imwrite(SRC_PATH + "temp.jpg", roi)
+		result = pytesseract.image_to_string(Image.open(SRC_PATH + "temp.jpg"), lang='eng', config=CHARACTER_WHITELIST)
+		os.remove(SRC_PATH + "temp.jpg")
+	except:
+		print("Error reading text.")
+		return ""	
+
 	return unidecode(result)
 #end of getText
 
@@ -210,7 +226,7 @@ def buildDocument(img):
 	#TODO remove -- display for debugging/testing
 	cv2.imshow("Original", imutils.resize(img, height=500))
 	cv2.imshow("Template", imutils.resize(template, height=500))
-	cv2.imshow("Warped", imutils.resize(drawBoxes(imReg), height=500))
+	cv2.imshow("Warped", imutils.resize(drawBoxes(imReg, docType), height=500))
 	cv2.waitKey(0)
 	cv2.destroyAllWindows()
 	
@@ -247,11 +263,12 @@ def matchToTemplate(img):
 				grayImg = imutils.resize(grayImg, width=tempWidth - 10)
 
 			#Try to find match
-			match = cv2.matchTemplate(grayImg, grayTemplate, cv2.TM_CCORR_NORMED)
+			match = cv2.matchTemplate(grayImg, grayTemplate, cv2.TM_SQDIFF_NORMED)
 			minVal,maxVal,minLoc,maxLoc = cv2.minMaxLoc(match)
+
 			print("Filename: {}, maxVal: {}, minVal: {}".format(filename, maxVal, minVal))	
-			if maxVal >= bestMatch:
-				bestMatch = maxVal
+			if minVal > bestMatch:
+				bestMatch = minVal
 				bestTemplate = template
 				#creates a substring from the filename up to the second underscore
 				#this isolates the state and orientation of the document
