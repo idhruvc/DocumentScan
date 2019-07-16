@@ -9,6 +9,7 @@ import Transform as transform
 from unidecode import unidecode
 import cv2
 import sys
+import math
 
 # TODO -- GOALS -- TODO
 # 1. Better Template
@@ -19,7 +20,7 @@ import sys
 #global variable declaration
 GOOD_MATCH_PERCENT = .1
 SRC_PATH = "/Users/ngover/Documents/TestPrograms/Images/"
-IMG = "Texas/H/TX_H_test33.png"
+IMG = "Texas/V/TX_V_test13.png"
 BLUR_THRESHOLD = 50 # TODO mess around with this
 DARKNESS_THRESHOLD = 50 # TODO mess with this
 NAME_WHITELIST="--oem 0 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -184,17 +185,19 @@ def cleanImage(img):
 #	of the bounding boxes which are expected to contain the text we are interested in.
 def buildDocument(img):
 	#call to removeBorder, removes border from image and warps perspective if edges can be detected
-	#removeBorder() will not modify the image if it cannot find a rectangular object.
-	imgNoBorder = transform.removeBorder(img)	
-	
+	#removeBorder() will return false if the image contains background, or true if removeBorder()
+	#was not able to locate the document, and the document still has the original background..
+	imgNoBorder, background = transform.removeBorder(img)	
+		
 	#prescreen
 	result = preScreen(imgNoBorder)
+	
 	if result == False:
 		print("Image quality too low.")
 		sys.exit(0)
 
 	#search for best template match
-	template, docType = matchToTemplate(imgNoBorder)
+	template, docType = matchToTemplate(imgNoBorder, background)
 	#call to alignImages, aligns image to the best template match
 	imReg = alignImages(img, template)
 	
@@ -239,18 +242,38 @@ def buildDocument(img):
 	
 
 #start of matchToTemplate
-#	This function takes an input BGR image and searches through the templates folder, attempts to match a template
+#	This function takes an input BGR image, and a flag paramteter that is given by the function removeBorder(). When the flag is True,
+#	removeBorder modified the image by removing background. If the flag is false, removeBorder could not locate a document
+#	and returned the original image.. The program loops and searches through the templates folder, attempts to match a template
 #	to the image, and keeps track of the score of the match (a score of 1 is best). At the end of the loop, the
 #	function returns the best match it found, along with the state & orientation of the document (i.e. TX_V for
 #	a vertical TX ID).
-def matchToTemplate(img):
-	#set to gray
+def matchToTemplate(img, background):
+	#rotate document 90 degrees if needed.
+	img = detectOrientation(img)
+	orientation = ""
+
+	#check if image still contains background. If it does not, we can figure out whether the document submitted is horizontal or
+	#vertical based on ratio of h:w
+	if not background:
+		(h,w) = img.shape[:2]
+		if h > w: #document is vertical
+			orientation = "_V_"
+		elif w > h: #document is horizontal
+			orientation = "_H_"
+
+	#perform prelim cleanup and edging	
 	grayImg = cleanImage(img)
 	grayImg = cv2.Canny(grayImg, 0, 150)
 	bestScore = 0
 
 	#loop through all the templates in the TEMPLATE src folder
 	for filename in os.listdir(SRC_PATH + "Templates/"):
+		#if we determined the orientation before the outer loop began, discard
+		#templates that are not oriented the same as the document.
+		if orientation is not "":
+			if not orientation in filename:
+				continue
 		if filename.endswith(".png") or filename.endswith(".jpg"): #All the templates expected to be jpg/png files
 			template = cv2.imread(SRC_PATH + "Templates/" + filename)			
 			grayTemplate = cleanImage(template)
@@ -285,6 +308,66 @@ def matchToTemplate(img):
 	return bestTemplate, form
 #end of matchToTemplate
 		
+
+#start of detectOrientation()
+#	This function determines the orientation of the text in an image so that if needed, we can rotate the image so that the
+#	text aligns horizontally. Function the image after alignment.
+def detectOrientation(image):
+	orig = image.copy()
+	image = imutils.resize(image, height = 500)
+	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+	gray = cv2.GaussianBlur(gray, (3,3), 5)
+	#locate contours and features, this will be used to find the outline of the document
+	edged = cv2.Canny(gray, 0, 150)
+	element = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3), (1,1))
+	edged =	cv2.morphologyEx(edged, cv2.MORPH_CLOSE, element)
+	copy = cv2.cvtColor(edged, cv2.COLOR_GRAY2BGR)
+			
+	#Keep track of how many lines are aligned vertically and how many horizontally
+	numVert = 0
+	numHoriz = 0
+
+	lines = cv2.HoughLinesP(edged, 1, np.pi/180, 100, None, 20, 20)
+	if lines is not None:
+		for i in range(0, len(lines)):
+			l = lines[i][0]
+			#Get the angle of the line in degrees, mod 180 to convert all angles to range [0,180)
+			#keeps negative angles out of the problem, easier to measure how far from horizontal
+			angle = getAngle(l[0], l[1], l[2], l[3]) % 180
+				
+			#if the angle is in the range [0,15] degrees or [165,180], it will be considered horizontal.
+			if (angle >= 0 and angle <= 15) or (angle >= 165 and angle <= 180):
+				numHoriz+=1
+				cv2.line(copy, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv2.LINE_AA) #TODO remove -- visualization for debug
+			#if the angle is in the range 90 +/- 15 degrees, it will be considered vertical
+			elif angle >= 75 and angle <= 105:
+				numVert+=1
+				cv2.line(copy, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv2.LINE_AA) #TODO remove -- visualization for debug
+			#else, the angle will be assumed to be a random line and will not be counted.
+		
+		#TODO remove this imshow -- debug
+		cv2.imshow("Visualization", imutils.resize(image, width=400))
+		cv2.waitKey(0)
+		
+		#at the end of measuring each angle, check whether the image is made up of predominantly horizontal or vertical
+		#lines. This will tell us how text in the ID is oriented.
+		if numHoriz > numVert:
+			return orig
+		elif numVert > numHoriz:
+			return np.rot90(orig) #rotate the image 90 degrees counter clockwise to align text horiz.
+		else:
+			return orig
+#end of detectOrientation
+
+
+#start of getAngle()
+#	This function expects 2 cartesian coordinate pairs (representing a line) and calculates the polar angle from
+#	horizontal that relates them. Returns the angle in degrees. 
+def getAngle(x1, y1, x2, y2):
+	radians = math.atan2(y2-y1, x2-x1)
+	degrees = math.degrees(radians)
+	return degrees
+#end of getAngle
 
 if __name__ == "__main__":
     main()	
