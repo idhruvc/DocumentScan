@@ -17,12 +17,14 @@ import sys
 # 5. Improve Pre-Screen
 
 #global variable declaration
-GOOD_MATCH_PERCENT = .125
+GOOD_MATCH_PERCENT = .1
 SRC_PATH = "/Users/ngover/Documents/TestPrograms/Images/"
-IMG = "Texas/H/TX_H_test19.png"
+IMG = "Texas/H/TX_H_test33.png"
 BLUR_THRESHOLD = 50 # TODO mess around with this
 DARKNESS_THRESHOLD = 50 # TODO mess with this
-CHARACTER_WHITELIST = "-c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/-"
+NAME_WHITELIST="--oem 0 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+NUM_WHITELIST="--oem 0 -c tessedit_char_whitelist=0123456789-/" #this whitelist can be passed when the input is expected to be a date
+ADDR_WHITELIST="--oem 0 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890-"
 
 #start of main
 def main():
@@ -32,9 +34,11 @@ def main():
 	except IOError as e:
                 print("({})".format(e))
 
-	#display results
-	myDoc = buildDocument(img)
-	print("\n" + myDoc.__str__())
+	if img is not None:
+		myDoc = buildDocument(img)
+		print("\n" + myDoc.__str__())
+	else:
+		print("Image could not be opened.")
 #end of main
 
 
@@ -134,26 +138,26 @@ def drawBoxes(img, docType):
 
 #start of getText
 #	This function is passed an image, or ROI, from which we will extract the text. It expects the image
-#	to only contain the data, because all text inside the ROI will be read and converted to a string
+#	to only contain the data, because all text inside the ROI will be read and converted to a string, but only
+# 	for characters included in the whitelist that gets passed to the function. The calling function should know what
+#	kind of input to expect. If it is looking for a date/SSN/DL#/etc, it can pass a different whitelist than if it
+#	were looking for a name.
 #	TODO -- Make this more robust... perhaps tweak this to be more dynamic so that it can solve the OK ID prob?
-def getText(roi):
-	try:
-		# prep image w/ resize, color convert, noise reduction & threshold.
-		roi = cv2.resize(roi,None,fx=1,fy=1.5,interpolation=cv2.INTER_CUBIC)
-		roi = imutils.resize(roi, height=500)
-		roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY) 
-		roi = cv2.GaussianBlur(roi, (3,3), 0)
-		roi = cv2.threshold(roi, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)[1]
-		#add a white border to the image to make it easier for OCR
-		roi = cv2.copyMakeBorder(roi, 500, 500, 500, 500, cv2.BORDER_CONSTANT, value=255)
-		
-		# create temp file for the roi, then open, read, and close.
-		cv2.imwrite(SRC_PATH + "temp.jpg", roi)
-		result = pytesseract.image_to_string(Image.open(SRC_PATH + "temp.jpg"), lang='eng', config=CHARACTER_WHITELIST)
-		os.remove(SRC_PATH + "temp.jpg")
-	except:
-		print("Error reading text.")
-		return ""	
+def getText(roi, whitelist):
+	# prep image w/ resize, color convert, noise reduction & threshold.
+	roi = cv2.resize(roi,None,fx=1,fy=1.5,interpolation=cv2.INTER_CUBIC)
+	roi = imutils.resize(roi, height=500)
+	roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY) 
+	roi = cv2.GaussianBlur(roi, (3,3), 0)
+	roi = cv2.threshold(roi, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)[1]
+
+	#add a white border to the image to make it easier for OCR
+	roi = cv2.copyMakeBorder(roi, 500, 500, 500, 500, cv2.BORDER_CONSTANT, value=255)
+	
+	# create temp file for the roi, then open, read, and close.
+	cv2.imwrite(SRC_PATH + "temp.jpg", roi)
+	result = pytesseract.image_to_string(Image.open(SRC_PATH + "temp.jpg"), lang='eng', config=whitelist)
+	os.remove(SRC_PATH + "temp.jpg")
 
 	return unidecode(result)
 #end of getText
@@ -212,16 +216,16 @@ def buildDocument(img):
 		#get coordinates of the ROIs from the document template
 		#retrieve first name coordinates from template, get text from image, assign to object
 		coords = getattr(templateData, "first")
-		myDoc.first = getText(imReg[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]])
+		myDoc.first = getText(imReg[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NAME_WHITELIST)
 		#retrieve last name coordinates from template, get text from image, assign to object
 		coords = getattr(templateData, "last")
-		myDoc.last = getText(imReg[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]])
+		myDoc.last = getText(imReg[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NAME_WHITELIST)
 		#retrieve Address coordinates from template, get text from image, assign to object
 		coords = getattr(templateData, "address")
-		myDoc.address = getText(imReg[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]])
+		myDoc.address = getText(imReg[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], ADDR_WHITELIST)
 		#retrieve DOB coordinates from template, get text from image, assign to object
 		coords = getattr(templateData, "dob")
-		myDoc.dob= getText(imReg[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]])
+		myDoc.dob= getText(imReg[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NUM_WHITELIST)
 
 	#TODO remove -- display for debugging/testing
 	cv2.imshow("Original", imutils.resize(img, height=500))
@@ -242,13 +246,15 @@ def buildDocument(img):
 def matchToTemplate(img):
 	#set to gray
 	grayImg = cleanImage(img)
-	bestMatch = 0
+	grayImg = cv2.Canny(grayImg, 0, 150)
+	bestScore = 0
 
 	#loop through all the templates in the TEMPLATE src folder
 	for filename in os.listdir(SRC_PATH + "Templates/"):
 		if filename.endswith(".png") or filename.endswith(".jpg"): #All the templates expected to be jpg/png files
 			template = cv2.imread(SRC_PATH + "Templates/" + filename)			
 			grayTemplate = cleanImage(template)
+			grayTemplate = cv2.Canny(grayTemplate, 0, 150)
 
 			#make sure sized appropriately before pass to function, if template height/width > image height/width,
 			#cv2.matchTemplate will throw exception.
@@ -263,16 +269,19 @@ def matchToTemplate(img):
 				grayImg = imutils.resize(grayImg, width=tempWidth - 10)
 
 			#Try to find match
-			match = cv2.matchTemplate(grayImg, grayTemplate, cv2.TM_SQDIFF_NORMED)
-			minVal,maxVal,minLoc,maxLoc = cv2.minMaxLoc(match)
+			match = cv2.matchTemplate(grayImg, grayTemplate, cv2.TM_SQDIFF)
+			minScore,maxScore,_,_ = cv2.minMaxLoc(match)
 
-			print("Filename: {}, maxVal: {}, minVal: {}".format(filename, maxVal, minVal))	
-			if minVal > bestMatch:
-				bestMatch = minVal
+			print("Filename: {}, score: {}".format(filename, minScore))	
+			if minScore > bestScore:
+				bestScore = minScore
 				bestTemplate = template
 				#creates a substring from the filename up to the second underscore
 				#this isolates the state and orientation of the document
-				form = filename[:filename.index('_', filename.index('_') + 1)]
+				form = filename[:filename.index('_', filename.index('_') + 1)]	
+
+	
+	print("BEST MATCH: {}".format(form)) # TODO remove this
 	return bestTemplate, form
 #end of matchToTemplate
 		
