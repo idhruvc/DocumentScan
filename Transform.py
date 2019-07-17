@@ -5,6 +5,9 @@ import imutils
 from skimage.filters import threshold_local
 import sys
 
+#start of OrderPoints
+#	This function orders the points in a list such that the first entry is the top left, the second
+#	is the top right, third is the bottom right, and fourth is the bottom left.
 def orderPoints(pts):
 	# initialzie a list of coordinates that will be ordered
 	# such that the first entry in the list is the top-left,
@@ -27,8 +30,11 @@ def orderPoints(pts):
  
 	# return the ordered coordinates
 	return rect
+#end of orderPoints
 
 
+#start of findCentroid()
+#	this function returns the coordinates of a centroid of a polygon from a list of vertices.
 def findCentroid(points):
 	x_list = [point[0] for point in points]
 	y_list = [point[1] for point in points]
@@ -36,20 +42,23 @@ def findCentroid(points):
 	x = sum(x_list) / length
 	y = sum(y_list) / length
 	return (x,y)
+#end of findCentroid
 
 
+#start of TransformFromPoints
+#	TODO
 def transformFromPoints(image, pts):
 	# obtain a consistent order of the points and unpack them
 	# individually
 	rect = orderPoints(pts)
 #TODO figure out if i want to do this centroid stuff vvv TODO
 	#find the centroid of the quadrilateral in order to dilate quadrilateral around centroid
-	centroid = findCentroid(rect)    
+#	centroid = findCentroid(rect)    
 
 	#dilate each point while keeping the quadrilateral centered around the centroid
-	for pt in rect:
-		pt[0] = centroid[0] + 1.1 * (pt[0] - centroid[0])
-		pt[1] = centroid[1] + 1.1 * (pt[1] - centroid[1]) 
+#	for pt in rect:
+#		pt[0] = centroid[0] + 1.1 * (pt[0] - centroid[0])
+#		pt[1] = centroid[1] + 1.1 * (pt[1] - centroid[1]) 
 	
 	(tl, tr, br, bl) = rect
  
@@ -79,77 +88,84 @@ def transformFromPoints(image, pts):
 		[0, maxHeight - 1]], dtype = "float32")
  
 	# compute the perspective transform matrix and then apply it
-	M = cv2.getPerspectiveTransform(rect, dst)
-	warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
+	transformMatrix = cv2.getPerspectiveTransform(rect, dst)
+	warped = cv2.warpPerspective(image, transformMatrix, (maxWidth, maxHeight))
  
 	# return the warped image
 	return warped
+#end of transformFromPoints
 
 
+#start of removeBorder()
+#	This function is given an image and attempts to remove the background from the image. The function
+#	uses thresholding and contour approximation to estimate a rectangular bounding box and perform a 
+#	perspective warp to make the image appear as if it were taken from directly above the document.
+#	Returns: warped - Image w/o background. If a document was not located, this will be the original img.
+#		 background - Flag variable. True if background is still in the picture, False if it was removed.
 def removeBorder(image):
 	ratio = image.shape[0]/500.0
 	orig = image.copy()
 	image = imutils.resize(image, height = 500)
 	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-	gray = cv2.GaussianBlur(gray, (11,11), 0)
+	gray = cv2.GaussianBlur(gray, (5,5), 0)
 	#locate contours and features, this will be used to find the outline of the document
 	edged = cv2.Canny(gray, 0, 150)
 	element = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3), (1,1))
 	edged =	cv2.morphologyEx(edged, cv2.MORPH_CLOSE, element)
-		
+	background = True		
+
 	#TODO remove -- image display for debug
-#	cv2.imshow("Edged", imutils.resize(edged, height=500))
-#	cv2.waitKey(0)
-#	cv2.destroyAllWindows()
+	cv2.imshow("Edged", imutils.resize(edged, height=500))
+	cv2.waitKey(0)
+	cv2.destroyAllWindows()
 		
 	cnts = cv2.findContours(edged.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
 	cnts = imutils.grab_contours(cnts)
 	cnts = sorted(cnts, key=cv2.contourArea, reverse = True)[:5]	
-	
-	#approximate the contour with a polygon	
-	c = cnts[0]
-	peri = cv2.arcLength(c, True)
-	approx = cv2.approxPolyDP(c, 0.05 * peri, True)
-	
-	#TODO remove  this vv --debug--
-#	copy = image.copy()
-#	cv2.drawContours(copy, approx, -1, (0,255,0),3)
-#	cv2.imshow("approx", copy)
-#	cv2.waitKey(0)
-#	cv2.destroyAllWindows()
 
-	#if approximated contour has 4 points, assuming the ID is the subject of the image,
-	#it should be the bounding box for the ID in the original image
-	
-	if len(approx) == 4:
-		screenCnt = approx
-	try:	
+	#Search through contours, if a contour with 4 bounding points is found, it can be assumed
+	#to be the ID.
+	for c in cnts:
+		peri = cv2.arcLength(c, True)
+		approx = cv2.approxPolyDP(c, 0.1 * peri, True)
+		if len(approx) == 4:
+			#test to check if area of the contour is less than 1/6 of the image's size, this way
+			#we can avoid selecting random boxes of the image if the ID can't be located
+			if cv2.contourArea(c) > (image.shape[0] * image.shape[1])/6:
+				screenCnt = approx
+				break		
+	try:
+		#attempt to try a warp perspective
 		warped = transformFromPoints(orig, screenCnt.reshape(4,2) * ratio)
-	except: # bounding polygon could not be found, just return original image
-		warped = orig	
+		#if perspective warp success, the flag will be set to false
+		background = False
+	except: #if the contour cannot be found, reset the screen contour variable and try again
+		#try again with a rectangular approximation of the biggest contour
+		c = cnts[0]
+		rect = cv2.minAreaRect(c)
+		box = cv2.boxPoints(rect)
+		box = np.int0(box)
+		approx = box
 
-	copy = image.copy()
-	rect = cv2.minAreaRect(c)
-	box = cv2.boxPoints(rect)
-	box = np.int0(box)
-	cv2.drawContours(copy, [box],0,(0,0,255),2)
-	cv2.imshow("Bounding Box", imutils.resize(copy,width=500))
-	cv2.waitKey(0)
-	cv2.destroyAllWindows()
+		#if approximated contour has 4 points, assuming the ID is the subject of the image, it should be
+		#the bounding box for the ID in the original image.
+	
+		if len(approx) == 4:
+			#if the area of the contour is less than 1/6 of the size of the image, it is probably
+			#a random box, such as the person's photo.
+			if cv2.contourArea(c) > (image.shape[0] * image.shape[1]) / 6:
+				screenCnt = approx 
+
+		try:	
+			warped = transformFromPoints(orig, screenCnt.reshape(4,2) * ratio)
+			background = False
+		except: # bounding polygon could not be found, just return original image
+			warped = orig	
 
 	#TODO remove -- image display for debug
-#	cv2.imshow("Warped", imutils.resize(warped, height=500))
-#	cv2.waitKey(0)
-#	cv2.destroyAllWindows()	
+	cv2.imshow("Warped", imutils.resize(warped, height=500))
+	cv2.waitKey(0)
+	cv2.destroyAllWindows()	
 
-	return warped
-
-
-#SRC = "/Users/ngover/Documents/TestPrograms/Images/Texas/H/"
-##imread
-#img = cv2.imread(SRC + "TX_H_test16.png")
-#if img.any() == None:
-#	print("File not found.")
-#	sys.exit(0)
-
-#img = removeBorder(img)
+	return warped, background
+#end of removeBorder

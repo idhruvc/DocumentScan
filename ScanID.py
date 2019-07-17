@@ -11,21 +11,25 @@ import cv2
 import sys
 import math
 
+
 # TODO -- GOALS -- TODO
 # 1. Better Template
+# 2. Improve background removal step
 # 3. Improve OCR
 # 4. Improve Alignment
 # 5. Improve Pre-Screen
 
+
 #global variable declaration
 GOOD_MATCH_PERCENT = .1
 SRC_PATH = "/Users/ngover/Documents/TestPrograms/Images/"
-IMG = "Texas/V/TX_V_test13.png"
+IMG = "Texas/V/TX_V_test15.png"
 BLUR_THRESHOLD = 50 # TODO mess around with this
 DARKNESS_THRESHOLD = 50 # TODO mess with this
 NAME_WHITELIST="--oem 0 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 NUM_WHITELIST="--oem 0 -c tessedit_char_whitelist=0123456789-/" #this whitelist can be passed when the input is expected to be a date
 ADDR_WHITELIST="--oem 0 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890-"
+
 
 #start of main
 def main():
@@ -249,6 +253,9 @@ def buildDocument(img):
 #	function returns the best match it found, along with the state & orientation of the document (i.e. TX_V for
 #	a vertical TX ID).
 def matchToTemplate(img, background):
+	h,w = img.shape[:2]
+	print("Height: {}, Width: {}".format(h,w))
+
 	#rotate document 90 degrees if needed.
 	img = detectOrientation(img)
 	orientation = ""
@@ -256,7 +263,8 @@ def matchToTemplate(img, background):
 	#check if image still contains background. If it does not, we can figure out whether the document submitted is horizontal or
 	#vertical based on ratio of h:w
 	if not background:
-		(h,w) = img.shape[:2]
+		h,w = img.shape[:2]
+		print("Height: {}, Width: {}".format(h,w))
 		if h > w: #document is vertical
 			orientation = "_V_"
 		elif w > h: #document is horizontal
@@ -291,8 +299,9 @@ def matchToTemplate(img, background):
 			if(imgWidth > tempWidth):
 				grayImg = imutils.resize(grayImg, width=tempWidth - 10)
 
-			#Try to find match
+			#Try to find match using cv2.TM_SQDIFF matching algorithm
 			match = cv2.matchTemplate(grayImg, grayTemplate, cv2.TM_SQDIFF)
+			#grab the scores of the match object
 			minScore,maxScore,_,_ = cv2.minMaxLoc(match)
 
 			print("Filename: {}, score: {}".format(filename, minScore))	
@@ -311,7 +320,8 @@ def matchToTemplate(img, background):
 
 #start of detectOrientation()
 #	This function determines the orientation of the text in an image so that if needed, we can rotate the image so that the
-#	text aligns horizontally. Function the image after alignment.
+#	text aligns horizontally. Function returns the image after alignment. #TODO -- hopefully like to make this better in the
+#	future, I'd like to be able to figure out whether the document is upside down or not.
 def detectOrientation(image):
 	orig = image.copy()
 	image = imutils.resize(image, height = 500)
@@ -326,8 +336,10 @@ def detectOrientation(image):
 	#Keep track of how many lines are aligned vertically and how many horizontally
 	numVert = 0
 	numHoriz = 0
-
+	
+	#Get the lines in the image, to find the orientation of the text in the image
 	lines = cv2.HoughLinesP(edged, 1, np.pi/180, 100, None, 20, 20)
+
 	if lines is not None:
 		for i in range(0, len(lines)):
 			l = lines[i][0]
@@ -338,18 +350,12 @@ def detectOrientation(image):
 			#if the angle is in the range [0,15] degrees or [165,180], it will be considered horizontal.
 			if (angle >= 0 and angle <= 15) or (angle >= 165 and angle <= 180):
 				numHoriz+=1
-				cv2.line(copy, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv2.LINE_AA) #TODO remove -- visualization for debug
 			#if the angle is in the range 90 +/- 15 degrees, it will be considered vertical
 			elif angle >= 75 and angle <= 105:
 				numVert+=1
-				cv2.line(copy, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv2.LINE_AA) #TODO remove -- visualization for debug
 			#else, the angle will be assumed to be a random line and will not be counted.
 		
-		#TODO remove this imshow -- debug
-		cv2.imshow("Visualization", imutils.resize(image, width=400))
-		cv2.waitKey(0)
-		
-		#at the end of measuring each angle, check whether the image is made up of predominantly horizontal or vertical
+		#at the end of measuring each angle, check whether the image is made up of predominantly horiz. or vert.
 		#lines. This will tell us how text in the ID is oriented.
 		if numHoriz > numVert:
 			return orig
@@ -369,5 +375,7 @@ def getAngle(x1, y1, x2, y2):
 	return degrees
 #end of getAngle
 
+
+#call to main
 if __name__ == "__main__":
     main()	
