@@ -2,28 +2,28 @@ import numpy as np
 import imutils
 import pytesseract
 import os
-from PIL import Image, ImageOps
-import TemplateData as templates
-import Document as document
-import Transform as transform
-from unidecode import unidecode
 import cv2
 import sys
 import math
+from PIL import Image, ImageOps
+from unidecode import unidecode
+import TemplateData as templates
+import Document as document
+import Transform as transform
 
 
 # TODO -- GOALS -- TODO
 # 1. Better Template
-# 2. Improve background removal step
-# 3. Improve OCR
-# 4. Improve Alignment
+# 2. Improve background removal step - IN PROGRESS
+# 3. Improve OCR - IN PROGRESS
+# 4. Improve Alignment - NEXT
 # 5. Improve Pre-Screen
 
 
 #global variable declaration
-GOOD_MATCH_PERCENT = .1
+GOOD_MATCH_PERCENT = .15
 SRC_PATH = "/Users/ngover/Documents/TestPrograms/Images/"
-IMG = "Texas/V/TX_V_test15.png"
+IMG = "Texas/H/TX_H_test19.png"
 BLUR_THRESHOLD = 50 # TODO mess around with this
 DARKNESS_THRESHOLD = 50 # TODO mess with this
 NAME_WHITELIST="--oem 0 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -63,7 +63,8 @@ def preScreen(img):
 	if focusMeasure < BLUR_THRESHOLD:
 		return False
 
-	#measure the mean darkness of the image
+	#measure the mean darkness level for the image
+	#(more true to document readability when background is successfully removed)
 	light = np.mean(img)
 
 	print("Darkness level: {}".format(light))	
@@ -137,6 +138,9 @@ def drawBoxes(img, docType):
 	# address
 	coords = getattr(templateData, "address")
 	cv2.rectangle(img, coords[0], coords[1], (0,255,0), 3)	
+	# expiration
+	coords = getattr(templateData, "expiration")
+	cv2.rectangle(img, coords[0], coords[1], (0,255,0), 3)
 	return img
 #end of drawBoxes
 
@@ -149,16 +153,31 @@ def drawBoxes(img, docType):
 #	were looking for a name.
 #	TODO -- Make this more robust... perhaps tweak this to be more dynamic so that it can solve the OK ID prob?
 def getText(roi, whitelist):
-	# prep image w/ resize, color convert, noise reduction & threshold.
-	roi = cv2.resize(roi,None,fx=1,fy=1.5,interpolation=cv2.INTER_CUBIC)
-	roi = imutils.resize(roi, height=500)
+	#if we're reading a date, dilate it in the Y direction, this makes it easier to tell apart '1' and '/'
+	if whitelist is NUM_WHITELIST: 
+		roi = imutils.resize(roi, height=55)
+	#name is one line, we'll approximate h=100 to get close to 300 dpi, which is optimal for OCR.
+	elif whitelist is NAME_WHITELIST:
+		roi = imutils.resize(roi, height=75)
+	#address is 2 lines, set height to try to get as close to 300 dpi as possible
+	elif whitelist is ADDR_WHITELIST:
+		roi = imutils.resize(roi, height=150)
+
+	# prep image w/ resize, color convert, noise reduction & threshold
 	roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY) 
 	roi = cv2.GaussianBlur(roi, (3,3), 0)
-	roi = cv2.threshold(roi, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)[1]
+	roi = cv2.threshold(roi, 10, 255, cv2.THRESH_BINARY|cv2.THRESH_OTSU)[1] 
+
+#	kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (4, 8))
+#	roi = cv2.morphologyEx(roi, cv2.MORPH_CLOSE, kernel)
 
 	#add a white border to the image to make it easier for OCR
-	roi = cv2.copyMakeBorder(roi, 500, 500, 500, 500, cv2.BORDER_CONSTANT, value=255)
-	
+	roi = cv2.copyMakeBorder(roi, 100, 100, 100, 100, cv2.BORDER_CONSTANT, value=255)
+
+	#TODO remove imshow -- for debug
+	cv2.imshow("Text ROI", imutils.resize(roi, width=400))
+	cv2.waitKey(0)
+		
 	# create temp file for the roi, then open, read, and close.
 	cv2.imwrite(SRC_PATH + "temp.jpg", roi)
 	result = pytesseract.image_to_string(Image.open(SRC_PATH + "temp.jpg"), lang='eng', config=whitelist)
@@ -197,7 +216,7 @@ def buildDocument(img):
 	result = preScreen(imgNoBorder)
 	
 	if result == False:
-		print("Image quality too low.")
+		print("Image quality too low, try retaking.")
 		sys.exit(0)
 
 	#search for best template match
@@ -205,7 +224,7 @@ def buildDocument(img):
 	#call to alignImages, aligns image to the best template match
 	imReg = alignImages(img, template)
 	
-	if docType.startswith("SS"): # social security card, process as such	
+	if docType.startswith("SSN"): # social security card, process as such	
 		# TODO
 		print("Social Security Card!")
 		myDoc = None
@@ -233,6 +252,9 @@ def buildDocument(img):
 		#retrieve DOB coordinates from template, get text from image, assign to object
 		coords = getattr(templateData, "dob")
 		myDoc.dob= getText(imReg[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NUM_WHITELIST)
+		#retrieve expiration coordinates from template, get text from image, assign to object
+		coords = getattr(templateData, "expiration")
+		myDoc.expiration = getText(imReg[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NUM_WHITELIST)
 
 	#TODO remove -- display for debugging/testing
 	cv2.imshow("Original", imutils.resize(img, height=500))
@@ -254,17 +276,17 @@ def buildDocument(img):
 #	a vertical TX ID).
 def matchToTemplate(img, background):
 	h,w = img.shape[:2]
-	print("Height: {}, Width: {}".format(h,w))
 
 	#rotate document 90 degrees if needed.
-	img = detectOrientation(img)
+	#note: this rotation SHOULD be done in the face detection step, but if there is no face in the document, it can be done here.
+	img = correctOrientation(img)
+		
 	orientation = ""
 
 	#check if image still contains background. If it does not, we can figure out whether the document submitted is horizontal or
 	#vertical based on ratio of h:w
 	if not background:
 		h,w = img.shape[:2]
-		print("Height: {}, Width: {}".format(h,w))
 		if h > w: #document is vertical
 			orientation = "_V_"
 		elif w > h: #document is horizontal
@@ -299,14 +321,14 @@ def matchToTemplate(img, background):
 			if(imgWidth > tempWidth):
 				grayImg = imutils.resize(grayImg, width=tempWidth - 10)
 
-			#Try to find match using cv2.TM_SQDIFF matching algorithm
-			match = cv2.matchTemplate(grayImg, grayTemplate, cv2.TM_SQDIFF)
+			#Try to find matches between template and image using TM_SQDIFF matching algorithm
+			match = cv2.matchTemplate(grayImg, grayTemplate, cv2.TM_CCOEFF)
 			#grab the scores of the match object
 			minScore,maxScore,_,_ = cv2.minMaxLoc(match)
 
-			print("Filename: {}, score: {}".format(filename, minScore))	
-			if minScore > bestScore:
-				bestScore = minScore
+			print("Filename: {}, score: {}".format(filename, maxScore))	
+			if maxScore > bestScore:
+				bestScore = maxScore
 				bestTemplate = template
 				#creates a substring from the filename up to the second underscore
 				#this isolates the state and orientation of the document
@@ -320,9 +342,8 @@ def matchToTemplate(img, background):
 
 #start of detectOrientation()
 #	This function determines the orientation of the text in an image so that if needed, we can rotate the image so that the
-#	text aligns horizontally. Function returns the image after alignment. #TODO -- hopefully like to make this better in the
-#	future, I'd like to be able to figure out whether the document is upside down or not.
-def detectOrientation(image):
+#	text aligns horizontally. Function returns the image after alignment.
+def correctOrientation(image):
 	orig = image.copy()
 	image = imutils.resize(image, height = 500)
 	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
