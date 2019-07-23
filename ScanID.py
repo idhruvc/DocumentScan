@@ -23,7 +23,7 @@ import numpy as np
 #global variable declaration
 GOOD_MATCH_PERCENT = .15
 SRC_PATH = "/Users/ngover/Documents/TestPrograms/Images/"
-IMG = "Samples/TX_H_test35.png"
+IMG = "Samples/OR_H_test8.png"
 BLUR_THRESHOLD = 40 # TODO mess around with this
 DARKNESS_THRESHOLD = 50 # TODO mess with this
 NAME_WHITELIST="--oem 0 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -83,7 +83,7 @@ def preScreen(img):
 #	method. The template and the original image are assumed to be the same image related by this homography, which
 #	is used to warp the perspective of the input image so that it aligns with the template. Returns the input image,
 #	aligned to the template.
-def alignImages(img, template):
+def alignToTemplate(img, template):
 	#image prep to improve OCR and alignment
 	imgClean = cleanImage(img)
 	templateClean = cleanImage(template)
@@ -111,7 +111,7 @@ def alignImages(img, template):
 		templatePoints[i,:] = templateKeypoints[match.trainIdx].pt
 	
 	# find homography
-	h, mask = cv2.findHomography(imgPoints, templatePoints, cv2.LEAST_MEDIAN)
+	h, mask = cv2.findHomography(imgPoints, templatePoints, cv2.RANSAC)
 	
 	# apply homography, warping the image to appear as if it were directly below the camera.
 	height, width, channels = template.shape
@@ -145,18 +145,17 @@ def drawBoxes(img, docType):
 #end of drawBoxes
 
 
-#start of getText
-#	This function is passed an image, or ROI, from which we will extract the text. It expects the image
+#start of readROI
+#	This function is passed an image regoin of interest, or ROI, from which we will extract the text. It expects the image
 #	to only contain the data, because all text inside the ROI will be read and converted to a string, but only
 # 	for characters included in the whitelist that gets passed to the function. The calling function should know what
 #	kind of input to expect. If it is looking for a date/SSN/DL#/etc, it can pass a different whitelist than if it
 #	were looking for a name.
-#	TODO -- Make this more robust... perhaps tweak this to be more dynamic so that it can solve the OK ID prob?
-def getText(roi, whitelist):
-	#if we're reading a date, dilate it in the Y direction, this makes it easier to tell apart '1' and '/'
+def readROI(roi, whitelist):
+	#date is one line, approximate to get it close to 300 dpi, which is optimal for OCR
 	if whitelist is NUM_WHITELIST: 
 		roi = imutils.resize(roi, height=55)
-	#name is one line, we'll approximate h=100 to get close to 300 dpi, which is optimal for OCR.
+	#name is one line, we'll approximate to get close to 300 dpi, which is optimal for OCR.
 	elif whitelist is NAME_WHITELIST:
 		roi = imutils.resize(roi, height=75)
 	#address is 2 lines, set height to try to get as close to 300 dpi as possible
@@ -165,14 +164,17 @@ def getText(roi, whitelist):
 
 	# prep image w/ resize, color convert, noise reduction & threshold
 	roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY) 
-	roi = cv2.GaussianBlur(roi, (3,3), 0)
-	roi = cv2.threshold(roi, 10, 255, cv2.THRESH_BINARY|cv2.THRESH_OTSU)[1] 
-
-#	kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (4, 8))
-#	roi = cv2.morphologyEx(roi, cv2.MORPH_CLOSE, kernel)
+	roi = cv2.GaussianBlur(roi, (9,9), 0)
+	roi = cv2.adaptiveThreshold(roi, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 7) 
+	kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 1))
+	roi = cv2.morphologyEx(roi, cv2.MORPH_CLOSE, kernel)
 
 	#add a white border to the image to make it easier for OCR
 	roi = cv2.copyMakeBorder(roi, 100, 100, 100, 100, cv2.BORDER_CONSTANT, value=255)
+
+	kernel = np.ones((3,3), np.uint8)
+	roi = cv2.dilate(roi, kernel, iterations=1)
+	roi = cv2.erode(roi, kernel, iterations=1)
 
 	#TODO remove imshow -- for debug
 	cv2.imshow("Text ROI", imutils.resize(roi, width=400))
@@ -231,9 +233,9 @@ def buildDocument(img):
 		sys.exit(0)
 
 	#search for best template match
-	template, docType = matchToTemplate(imgNoBorder, background)
-	#call to alignImages, aligns image to the best template match
-	imReg = alignImages(img, template)
+	template, docType = selectTemplate(imgNoBorder, background)
+	#line up the input image with the selected template so that the data will be exactly where we expect
+	imgAligned = alignToTemplate(img, template)
 	
 	if docType.startswith("SSN"): # social security card, process as such	
 		# TODO
@@ -253,24 +255,24 @@ def buildDocument(img):
 		#get coordinates of the ROIs from the document template
 		#retrieve first name coordinates from template, get text from image, assign to object
 		coords = getattr(templateData, "first")
-		myDoc.first = getText(imReg[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NAME_WHITELIST)
+		myDoc.first = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NAME_WHITELIST)
 		#retrieve last name coordinates from template, get text from image, assign to object
 		coords = getattr(templateData, "last")
-		myDoc.last = getText(imReg[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NAME_WHITELIST)
+		myDoc.last = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NAME_WHITELIST)
 		#retrieve Address coordinates from template, get text from image, assign to object
 		coords = getattr(templateData, "address")
-		myDoc.address = getText(imReg[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], ADDR_WHITELIST)
+		myDoc.address = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], ADDR_WHITELIST)
 		#retrieve DOB coordinates from template, get text from image, assign to object
 		coords = getattr(templateData, "dob")
-		myDoc.dob= getText(imReg[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NUM_WHITELIST)
+		myDoc.dob= readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NUM_WHITELIST)
 		#retrieve expiration coordinates from template, get text from image, assign to object
 		coords = getattr(templateData, "expiration")
-		myDoc.expiration = getText(imReg[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NUM_WHITELIST)
+		myDoc.expiration = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NUM_WHITELIST)
 
 	#TODO remove -- display for debugging/testing
 	cv2.imshow("Original", imutils.resize(img, height=500))
-	cv2.imshow("Template", imutils.resize(template, height=500))
-	cv2.imshow("Warped", imutils.resize(drawBoxes(imReg, docType), height=500))
+	cv2.imshow("Template Selection", imutils.resize(template, height=500))
+	cv2.imshow("Original Aligned to Template", imutils.resize(drawBoxes(imgAligned, docType), height=500))
 	cv2.waitKey(0)
 	cv2.destroyAllWindows()
 	
@@ -278,9 +280,9 @@ def buildDocument(img):
 #end of buildDocument
 	
 
-#start of matchToTemplate
+#start of selectTemplate
 #	TODO
-def matchToTemplate(img, background, location=SRC_PATH+"Templates/"):
+def selectTemplate(img, background, location=SRC_PATH+"Templates/"):
 	h,w = img.shape[:2]
 	
 	#rotate document 90 degrees if needed.
@@ -296,6 +298,10 @@ def matchToTemplate(img, background, location=SRC_PATH+"Templates/"):
 			orientation = "_V"
 		elif w > h: #document is horizontal
 			orientation = "_H"
+
+	#TODO remove this -- for debug
+	cv2.imshow("Corrected", imutils.resize(img, height=500))
+	cv2.waitKey(0)
 
 	#Get the filename of the format that had the best match in the input image. the split() function gives the name of the file without
 	#the .jpg or .png extension.
@@ -332,7 +338,7 @@ def matchToTemplate(img, background, location=SRC_PATH+"Templates/"):
 
 	print("FORM: {}".format(form))
 	return bestTemplate, form
-#end of matchToTemplate
+#end of selectTemplate
 		
 
 #start of multiScaleTemplateSelect()TODO TODO TODO comment this code plz
@@ -349,7 +355,7 @@ def multiScaleTemplateSelect(img, location):
 	for filename in os.listdir(location):
 		if filename.endswith(".png") or filename.endswith(".jpg"): #All the templates expected to be jpg/png files
 			template = cv2.imread(location + filename)
-			template = imutils.resize(template, height=40)
+			template = imutils.resize(template, height=30)
 			grayTemplate = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
 			grayTemplate = cv2.GaussianBlur(grayTemplate, (5,5), 0)
 			(tH, tW) = template.shape[:2]
@@ -381,7 +387,7 @@ def multiScaleTemplateSelect(img, location):
 #end of multiScaleTemplateSelect
 
 
-#start of detectOrientation()
+#start of correctOrientation()
 #	This function determines the orientation of the text in an image so that if needed, we can rotate the image so that the
 #	text aligns horizontally. Function returns the image after alignment.
 def correctOrientation(image):
@@ -416,7 +422,7 @@ def correctOrientation(image):
 			elif angle >= 75 and angle <= 105:
 				numVert+=1
 			#else, the angle will be assumed to be a random line and will not be counted.
-		
+
 		#at the end of measuring each angle, check whether the image is made up of predominantly horiz. or vert.
 		#lines. This will tell us how text in the ID is oriented.
 		if numHoriz > numVert:
@@ -425,7 +431,7 @@ def correctOrientation(image):
 			return np.rot90(orig) #rotate the image 90 degrees counter clockwise to align text horiz.
 		else:
 			return orig
-#end of detectOrientation
+#end of correctOrientation
 
 
 #start of getAngle()
