@@ -3,8 +3,7 @@ import pytesseract
 import os
 import cv2
 import sys
-import math
-from PIL import Image, ImageOps
+from PIL import Image
 from unidecode import unidecode
 from pathlib import Path
 import TemplateData as templates
@@ -23,8 +22,8 @@ import numpy as np
 #global variable declaration
 GOOD_MATCH_PERCENT = .15
 SRC_PATH = "/Users/ngover/Documents/TestPrograms/Images/"
-IMG = "Samples/OR_H_test8.png"
-BLUR_THRESHOLD = 40 # TODO mess around with this
+IMG = "Samples/TX_V_test12.png"
+BLUR_THRESHOLD = 15 # TODO mess around with this
 DARKNESS_THRESHOLD = 50 # TODO mess with this
 NAME_WHITELIST="--oem 0 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 NUM_WHITELIST="--oem 0 -c tessedit_char_whitelist=0123456789-/" #this whitelist can be passed when the input is expected to be a date
@@ -45,6 +44,71 @@ def main():
 	else:
 		print("Image could not be opened.")
 #end of main
+
+
+#start of buildDocument
+#	This function serves as a driver, first by calling the function to match the image to the best template,
+#	then aligning the image to the template, then pulling the data from the ID by referencing the location
+#	of the bounding boxes which are expected to contain the text we are interested in.
+def buildDocument(img):
+	#call to removeBorder, removes border from image and warps perspective if edges can be detected
+	#removeBorder() will return false if the image contains background, or true if removeBorder()
+	#was not able to locate the document, and the document still has the original background..
+	imgNoBorder, background = transform.removeBorder(img)	
+		
+	#prescreen
+	result = preScreen(imgNoBorder)
+	
+	if result == False:
+		print("Image quality too low, try retaking.")
+		sys.exit(0)
+
+	#search for best template match
+	template, docType = selectTemplate(imgNoBorder, background)
+	#line up the input image with the selected template so that the data will be exactly where we expect
+	imgAligned = alignToTemplate(img, template)
+	
+	if docType.startswith("SSN"): # social security card, process as such	
+		# TODO
+		print("Social Security Card!")
+		myDoc = None
+	elif docType.startswith("PP"): # document is a passport, process as such
+		# TODO
+		print("Passport!")
+		myDoc = None
+	else: # document is an ID
+		myDoc = document.License()
+		#access the license's data & ROIs from the TemplateData module
+		templateData = getattr(templates, docType)
+		myDoc.orientation = getattr(templateData, "orientation")
+		myDoc.state = getattr(templateData, "state")
+
+		#get coordinates of the ROIs from the document template
+		#retrieve first name coordinates from template, get text from image, assign to object
+		coords = getattr(templateData, "first")
+		myDoc.first = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NAME_WHITELIST)
+		#retrieve last name coordinates from template, get text from image, assign to object
+		coords = getattr(templateData, "last")
+		myDoc.last = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NAME_WHITELIST)
+		#retrieve Address coordinates from template, get text from image, assign to object
+		coords = getattr(templateData, "address")
+		myDoc.address = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], ADDR_WHITELIST)
+		#retrieve DOB coordinates from template, get text from image, assign to object
+		coords = getattr(templateData, "dob")
+		myDoc.dob= readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NUM_WHITELIST)
+		#retrieve expiration coordinates from template, get text from image, assign to object
+		coords = getattr(templateData, "expiration")
+		myDoc.expiration = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NUM_WHITELIST)
+
+	#TODO remove -- display for debugging/testing
+	cv2.imshow("Original", imutils.resize(img, height=500))
+	cv2.imshow("Template Selection", imutils.resize(template, height=500))
+	cv2.imshow("Original Aligned to Template", imutils.resize(drawBoxes(imgAligned, docType), height=500))
+	cv2.waitKey(0)
+	cv2.destroyAllWindows()
+	
+	return myDoc
+#end of buildDocument
 
 
 #start of preScreen()
@@ -75,8 +139,111 @@ def preScreen(img):
 	return True
 #end of preScreen
 
+	
+#start of selectTemplate
+#	TODO
+def selectTemplate(img, background, location=SRC_PATH+"Templates/"):
+	h,w = img.shape[:2]
+	orientation = ""
 
-#start of alignImages
+	#check if image still contains background. If it does not, we can figure out whether the document submitted is horizontal or
+	#vertical based on ratio of h:w
+	if not background:
+		h,w = img.shape[:2]
+		if h > w: #document is vertical
+			orientation = "_V"
+		elif w > h: #document is horizontal
+			orientation = "_H"
+
+	#TODO remove this -- for debug
+	cv2.imshow("Corrected", imutils.resize(img, height=500))
+	cv2.waitKey(0)
+
+	#Get the filename of the format that had the best match in the input image. the split() function gives the name of the file without
+	#the .jpg or .png extension.
+	form = multiScaleTemplateSelect(img, location).split('.')[0]
+
+	print("Searching " + form + " directory...")	
+	
+	#update location to be the subdirectory containing all of the images for the specified form
+	location = location + form + "/"
+	#update form so that it will contain the filename and orientation if orientation was already determined
+	form += orientation	
+	
+	#check if the file we're looking for with the specified form and orientation exists.
+	if os.path.isfile(location + form + ".jpg"):
+		bestTemplate = cv2.imread(location + form + ".jpg")
+	elif os.path.isfile(location + form + ".png"):
+		bestTemplate = cv2.imread(location + form + ".png")
+	#if the first two branches of elif fail, then the file does not exist, that means one of two cases:
+	#1. outline of document was not found to assign a vertical or horizontal orientation
+	#2. Layout was not found (some states, such as oregon have different formats with DL picture on the left or right side.
+	#3. (most unlikely) false match to the state/template occurred in the first loop/
+	elif background is True:
+		#go into features subdirectory, this contains all the unique features for each license type. The best match will contain
+		#the form name in the filename. The form exists between the first underscore and the file extension. 
+		#ex filenames: feature1_V.jpg, feature3_H2.png
+		bestFeatureMatch = multiScaleTemplateSelect(img, location + "Features/")
+		form = form + "_" +  bestFeatureMatch.split("_")[1].split('.')[0]
+
+		#now that we have form name, attempt to read the CORRECT template from the /Templates/State/ folder.
+		bestTemplate = None
+		bestTemplate = cv2.imread(location + form + ".jpg")
+		if bestTemplate is None:
+			bestTemplate = cv2.imread(location + form + ".png")
+
+	print("FORM: {}".format(form))
+	return bestTemplate, form
+#end of selectTemplate
+		
+
+#start of multiScaleTemplateSelect()
+#	This function loops through all templates in the subdirectory, whose path is stored as a string in the variable named
+#	location. The function is also passed the image itself as an openCV object. The function loops over multiple scales
+#	of the input image, trying to match each template file in the subdirectory to the image. When the loop finishes, the filename
+#	of the image that best matched the input image is returned in the form of a string.
+def multiScaleTemplateSelect(img, location):
+	grayImg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+	grayImg = cv2.GaussianBlur(grayImg, (5,5), 0)
+	bestScore = 0
+	
+	#Loop through all files in the subdirectory stored in the variable location
+	for filename in os.listdir(location):
+		if filename.endswith(".png") or filename.endswith(".jpg"): #All the templates expected to be jpg/png files
+			template = cv2.imread(location + filename)
+			template = imutils.resize(template, height=30)
+			grayTemplate = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+			grayTemplate = cv2.GaussianBlur(grayTemplate, (5,5), 0)
+			(tH, tW) = template.shape[:2]
+
+			#Loop over different scales of the image
+			for scale in np.linspace(0.1, .5, 15)[::-1]:
+				resized = imutils.resize(grayImg, width=int(grayImg.shape[1] * scale))
+
+				#Break if the resized image is smaller than the template.	
+				if resized.shape[0] < tH or resized.shape[1] < tW:
+					break
+
+				#Edge detection
+				edgedImg = cv2.Canny(resized, 0, 200)
+				edgedTemplate = cv2.Canny(grayTemplate, 0, 200)
+				
+				#get list of matches, compare best match score to bestScore
+				result = cv2.matchTemplate(edgedImg, edgedTemplate, cv2.TM_CCORR_NORMED)
+				minScore,maxScore,_,_ = cv2.minMaxLoc(result)
+				
+				print("FILE: {}, SCORE: {}".format(filename, maxScore)) #TODO remove -- for debug
+
+				if maxScore > bestScore:
+					bestScore = maxScore
+					bestMatch = filename
+
+	print("BEST MATCH: {}, SCORE: {}".format(bestMatch, bestScore)) #TODO remove-- this was for debug
+	return bestMatch
+#end of multiScaleTemplateSelect
+
+
+#start of alignToTemplate
 #	This function uses takes an image and the template it has been matched to, identifies the areas
 #	of the image that correspond, and calculates the homography (essentially the relationship between
 #	two perspectives of the same image, takes into account rotation and translation) using the cv2.findHomography()
@@ -88,8 +255,8 @@ def alignToTemplate(img, template):
 	imgClean = cleanImage(img)
 	templateClean = cleanImage(template)
 
-	# Detect image keypoints & descriptors using the AKAZE algorithm
-	akaze = cv2.AKAZE_create()
+	# Detect image keypoints & descriptors using the BRISK algorithm
+	akaze = cv2.BRISK_create()
 	imgKeypoints, imgDescriptors = akaze.detectAndCompute(imgClean, None)
 	templateKeypoints, templateDescriptors = akaze.detectAndCompute(templateClean, None)
 	
@@ -117,7 +284,7 @@ def alignToTemplate(img, template):
 	height, width, channels = template.shape
 	imgAligned = cv2.warpPerspective(img, h, (width, height))
 	return imgAligned
-#end of alignImages
+#end of alignToTemplate
 
 
 #start of drawBoxes
@@ -197,7 +364,7 @@ def readROI(roi, whitelist):
 			result = "".join(s)
 
 	return unidecode(result)
-#end of getText
+#end of readROI
 
 
 #start of cleanImage
@@ -213,235 +380,6 @@ def cleanImage(img):
 	imgClean = cv2.erode(imgClean, kernel, iterations=1)
 	return imgClean
 #end of cleanImage
-
-
-#start of buildDocument
-#	This function serves as a driver, first by calling the function to match the image to the best template,
-#	then aligning the image to the template, then pulling the data from the ID by referencing the location
-#	of the bounding boxes which are expected to contain the text we are interested in.
-def buildDocument(img):
-	#call to removeBorder, removes border from image and warps perspective if edges can be detected
-	#removeBorder() will return false if the image contains background, or true if removeBorder()
-	#was not able to locate the document, and the document still has the original background..
-	imgNoBorder, background = transform.removeBorder(img)	
-		
-	#prescreen
-	result = preScreen(imgNoBorder)
-	
-	if result == False:
-		print("Image quality too low, try retaking.")
-		sys.exit(0)
-
-	#search for best template match
-	template, docType = selectTemplate(imgNoBorder, background)
-	#line up the input image with the selected template so that the data will be exactly where we expect
-	imgAligned = alignToTemplate(img, template)
-	
-	if docType.startswith("SSN"): # social security card, process as such	
-		# TODO
-		print("Social Security Card!")
-		myDoc = None
-	elif docType.startswith("PP"): # document is a passport, process as such
-		# TODO
-		print("Passport!")
-		myDoc = None
-	else: # document is an ID
-		myDoc = document.License()
-		#access the license's data & ROIs from the TemplateData module
-		templateData = getattr(templates, docType)
-		myDoc.orientation = getattr(templateData, "orientation")
-		myDoc.state = getattr(templateData, "state")
-
-		#get coordinates of the ROIs from the document template
-		#retrieve first name coordinates from template, get text from image, assign to object
-		coords = getattr(templateData, "first")
-		myDoc.first = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NAME_WHITELIST)
-		#retrieve last name coordinates from template, get text from image, assign to object
-		coords = getattr(templateData, "last")
-		myDoc.last = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NAME_WHITELIST)
-		#retrieve Address coordinates from template, get text from image, assign to object
-		coords = getattr(templateData, "address")
-		myDoc.address = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], ADDR_WHITELIST)
-		#retrieve DOB coordinates from template, get text from image, assign to object
-		coords = getattr(templateData, "dob")
-		myDoc.dob= readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NUM_WHITELIST)
-		#retrieve expiration coordinates from template, get text from image, assign to object
-		coords = getattr(templateData, "expiration")
-		myDoc.expiration = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NUM_WHITELIST)
-
-	#TODO remove -- display for debugging/testing
-	cv2.imshow("Original", imutils.resize(img, height=500))
-	cv2.imshow("Template Selection", imutils.resize(template, height=500))
-	cv2.imshow("Original Aligned to Template", imutils.resize(drawBoxes(imgAligned, docType), height=500))
-	cv2.waitKey(0)
-	cv2.destroyAllWindows()
-	
-	return myDoc
-#end of buildDocument
-	
-
-#start of selectTemplate
-#	TODO
-def selectTemplate(img, background, location=SRC_PATH+"Templates/"):
-	h,w = img.shape[:2]
-	
-	#rotate document 90 degrees if needed.
-	#note: this rotation SHOULD be done in the face detection step, but if there is no face in the document, it can be done here.
-	img = correctOrientation(img)
-	orientation = ""
-
-	#check if image still contains background. If it does not, we can figure out whether the document submitted is horizontal or
-	#vertical based on ratio of h:w
-	if not background:
-		h,w = img.shape[:2]
-		if h > w: #document is vertical
-			orientation = "_V"
-		elif w > h: #document is horizontal
-			orientation = "_H"
-
-	#TODO remove this -- for debug
-	cv2.imshow("Corrected", imutils.resize(img, height=500))
-	cv2.waitKey(0)
-
-	#Get the filename of the format that had the best match in the input image. the split() function gives the name of the file without
-	#the .jpg or .png extension.
-	form = multiScaleTemplateSelect(img, location).split('.')[0]
-
-	print("Searching " + form + " directory...")	
-	
-	#update location to be the subdirectory containing all of the images for the specified form
-	location = location + form + "/"
-	#update form so that it will contain the filename and orientation if orientation was already determined
-	form += orientation	
-	
-	#check if the file we're looking for with the specified form and orientation exists.
-	if os.path.isfile(location + form + ".jpg"):
-		bestTemplate = cv2.imread(location + form + ".jpg")
-	elif os.path.isfile(location + form + ".png"):
-		bestTemplate = cv2.imread(location + form + ".png")
-	#if the first two branches of elif fail, then the file does not exist, that means one of two cases:
-	#1. outline of document was not found to assign a vertical or horizontal orientation
-	#2. Layout was not found (some states, such as oregon have different formats with DL picture on the left or right side.
-	#3. (most unlikely) false match to the state/template occurred in the first loop/
-	elif background is True:
-		#go into features subdirectory, this contains all the unique features for each license type. The best match will contain
-		#the form name in the filename. The form exists between the first underscore and the file extension. 
-		#ex filenames: feature1_V.jpg, feature3_H2.png
-		bestFeatureMatch = multiScaleTemplateSelect(img, location + "Features/")
-		form = form + "_" +  bestFeatureMatch.split("_")[1].split('.')[0]
-
-		#now that we have form name, attempt to read the CORRECT template from the /Templates/State/ folder.
-		bestTemplate = None
-		bestTemplate = cv2.imread(location + form + ".jpg")
-		if bestTemplate is None:
-			bestTemplate = cv2.imread(location + form + ".png")
-
-	print("FORM: {}".format(form))
-	return bestTemplate, form
-#end of selectTemplate
-		
-
-#start of multiScaleTemplateSelect()TODO TODO TODO comment this code plz
-#	This function loops through all templates in the subdirectory, whose path is stored as a string in the variable named
-#	location. The function is also passed the image itself as an openCV object. The function loops over multiple scales
-#	of the input image, trying to match each template file in the subdirectory to the image. When the loop finishes, the filename
-#	of the image that best matched the input image is returned in the form of a string.
-def multiScaleTemplateSelect(img, location):
-	grayImg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-	grayImg = cv2.GaussianBlur(grayImg, (5,5), 0)
-	bestScore = 0
-	
-	#Loop through all files in the subdirectory stored in the variable location
-	for filename in os.listdir(location):
-		if filename.endswith(".png") or filename.endswith(".jpg"): #All the templates expected to be jpg/png files
-			template = cv2.imread(location + filename)
-			template = imutils.resize(template, height=30)
-			grayTemplate = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-			grayTemplate = cv2.GaussianBlur(grayTemplate, (5,5), 0)
-			(tH, tW) = template.shape[:2]
-
-			#Loop over different scales of the image
-			for scale in np.linspace(0.1, .5, 15)[::-1]:
-				resized = imutils.resize(grayImg, width=int(grayImg.shape[1] * scale))
-
-				#Break if the resized image is smaller than the template.	
-				if resized.shape[0] < tH or resized.shape[1] < tW:
-					break
-
-				#Edge detection
-				edgedImg = cv2.Canny(resized, 0, 200)
-				edgedTemplate = cv2.Canny(grayTemplate, 0, 200)
-				
-				#get list of matches, compare best match score to bestScore
-				result = cv2.matchTemplate(edgedImg, edgedTemplate, cv2.TM_CCORR_NORMED)
-				minScore,maxScore,_,_ = cv2.minMaxLoc(result)
-				
-				print("FILE: {}, SCORE: {}".format(filename, maxScore)) #TODO remove -- for debug
-
-				if maxScore > bestScore:
-					bestScore = maxScore
-					bestMatch = filename
-
-	print("BEST MATCH: {}, SCORE: {}".format(bestMatch, bestScore)) #TODO remove-- this was for debug
-	return bestMatch
-#end of multiScaleTemplateSelect
-
-
-#start of correctOrientation()
-#	This function determines the orientation of the text in an image so that if needed, we can rotate the image so that the
-#	text aligns horizontally. Function returns the image after alignment.
-def correctOrientation(image):
-	orig = image.copy()
-	image = imutils.resize(image, height = 500)
-	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-	gray = cv2.GaussianBlur(gray, (3,3), 5)
-	#locate contours and features, this will be used to find the outline of the document
-	edged = cv2.Canny(gray, 0, 150)
-	element = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3), (1,1))
-	edged =	cv2.morphologyEx(edged, cv2.MORPH_CLOSE, element)
-	copy = cv2.cvtColor(edged, cv2.COLOR_GRAY2BGR)
-			
-	#Keep track of how many lines are aligned vertically and how many horizontally
-	numVert = 0
-	numHoriz = 0
-	
-	#Get the lines in the image, to find the orientation of the text in the image
-	lines = cv2.HoughLinesP(edged, 1, np.pi/180, 100, None, 20, 20)
-
-	if lines is not None:
-		for i in range(0, len(lines)):
-			l = lines[i][0]
-			#Get the angle of the line in degrees, mod 180 to convert all angles to range [0,180)
-			#keeps negative angles out of the problem, easier to measure how far from horizontal
-			angle = getAngle(l[0], l[1], l[2], l[3]) % 180
-				
-			#if the angle is in the range [0,15] degrees or [165,180], it will be considered horizontal.
-			if (angle >= 0 and angle <= 15) or (angle >= 165 and angle <= 180):
-				numHoriz+=1
-			#if the angle is in the range 90 +/- 15 degrees, it will be considered vertical
-			elif angle >= 75 and angle <= 105:
-				numVert+=1
-			#else, the angle will be assumed to be a random line and will not be counted.
-
-		#at the end of measuring each angle, check whether the image is made up of predominantly horiz. or vert.
-		#lines. This will tell us how text in the ID is oriented.
-		if numHoriz > numVert:
-			return orig
-		elif numVert > numHoriz:
-			return np.rot90(orig) #rotate the image 90 degrees counter clockwise to align text horiz.
-		else:
-			return orig
-#end of correctOrientation
-
-
-#start of getAngle()
-#	This function expects 2 cartesian coordinate pairs (representing a line) and calculates the polar angle from
-#	horizontal that relates them. Returns the angle in degrees. 
-def getAngle(x1, y1, x2, y2):
-	radians = math.atan2(y2-y1, x2-x1)
-	degrees = math.degrees(radians)
-	return degrees
-#end of getAngle
 
 
 #call to main

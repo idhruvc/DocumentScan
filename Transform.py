@@ -1,10 +1,9 @@
 import cv2
 import numpy as np
-from matplotlib import pyplot as plt
+#from matplotlib import pyplot as plt
 import imutils
-from skimage.filters import threshold_local
 import sys
-
+import math
 
 #start of OrderPoints
 #	This function orders the points in a list such that the first entry is the top left, the second
@@ -62,14 +61,11 @@ def transformFromPoints(image, pts):
 	# (i.e. top-down view) of the image, again specifying points
 	# in the top-left, top-right, bottom-right, and bottom-left
 	# order
-	dst = np.array([
-		[0, 0],
-		[maxWidth - 1, 0],
-		[maxWidth - 1, maxHeight - 1],
+	topView = np.array([[0, 0], [maxWidth - 1, 0], [maxWidth - 1, maxHeight - 1],
 		[0, maxHeight - 1]], dtype = "float32")
  
 	# compute the perspective transform matrix and then apply it
-	transformMatrix = cv2.getPerspectiveTransform(boundingBox, dst)
+	transformMatrix = cv2.getPerspectiveTransform(boundingBox, topView)
 	warped = cv2.warpPerspective(image, transformMatrix, (maxWidth, maxHeight))
  
 	# return the warped image
@@ -84,16 +80,23 @@ def transformFromPoints(image, pts):
 #	Returns: warped - Image w/o background. If a document was not located, this will be the original img.
 #		 background - Flag variable. True if background is still in the picture, False if it was removed.
 def removeBorder(image):
-	ratio = image.shape[0]/500.0
-	orig = image.copy()
-	image = imutils.resize(image, height = 500)
-	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-	element = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3), (1,1))
 	background = True
 	minContourArea = 10000
 	i = 0	
 	size = 11 # size of the Gaussian Blur
 
+	#first call correctOrientation() which lines up the image based on the text it could find. Later,
+	#findFaces() will detect whether the image it returned is upside-down or not.
+	image = correctOrientation(image)
+	
+	ratio = image.shape[0]/500.0
+	orig = image.copy()
+	image = imutils.resize(image, height = 500)
+
+	#convert color & structure image
+	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+	element = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3), (1,1))
+	
 	#loop until the background is removed, adjusting gaussian blur settings each pass, with a maximum of
 	#5 passes. If the outline not found after 5 passes, original image is returned.
 	while background is True and i < 5:
@@ -112,7 +115,7 @@ def removeBorder(image):
 		cnts = sorted(cnts, key=cv2.contourArea, reverse = True)[:5]	
 	
 		#Search through contours, if a contour with 4 bounding points is found, it can be assumed
-		#to be the ID.
+		#to be the ID because we're assuming the ID is the subject of the photo.
 		for c in cnts:
 			peri = cv2.arcLength(c, True)
 			approx = cv2.approxPolyDP(c, 0.1 * peri, True)
@@ -139,6 +142,8 @@ def removeBorder(image):
 			#make sure the image isnt JUST the person's picture
 			else:
 				#perform the correction for the number of rotations the findFaces() method performed
+				#NOTE: this is because if findFaces() returned the rectangular box bounding the person's
+				#face, it will fix the orientation for future iterations.
 				for j in range(0, rotations):
 					gray = np.rot90(gray)
 					temp = np.rot90(temp)
@@ -179,11 +184,12 @@ def removeBorder(image):
 #	another corrective rotation function is called, its logic only double checks this function.
 def findFaces(image):
 	faceCascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+
 	for i in range(0,4):
 		copy = image.copy()
 		gray = cv2.cvtColor(copy, cv2.COLOR_BGR2GRAY)
 		#Now, generate a list of rectangles for all detected faces in the image.
-		faces = faceCascade.detectMultiScale(gray, scaleFactor=1.15, minNeighbors=15, minSize=(30,30))
+		faces = faceCascade.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=15, minSize=(30,30))
 		#TODO remove the imshow
 		for (x,y,w,h) in faces:
 			cv2.rectangle(copy, (x,y), (x+w, y+h), (0,255,0), 2)
@@ -196,3 +202,66 @@ def findFaces(image):
 			image = np.rot90(image)
 	return None, 0
 #end of findFaces()
+
+
+#start of correctOrientation()
+#	This function determines the orientation of the text in an image so that if needed, we can rotate the image so that the
+#	text aligns horizontally. Function returns the image after alignment.
+def correctOrientation(image):
+	orig = image.copy()
+	image = imutils.resize(image, height = 500)
+	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+	gray = cv2.GaussianBlur(gray, (3,3), 5)
+	#locate contours and features, this will be used to find the outline of the document
+	edged = cv2.Canny(gray, 0, 150)
+	element = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3), (1,1))
+	edged =	cv2.morphologyEx(edged, cv2.MORPH_CLOSE, element)
+	copy = cv2.cvtColor(edged, cv2.COLOR_GRAY2BGR)
+			
+	#Keep track of how many lines are aligned vertically and how many horizontally
+	numVert = 0
+	numHoriz = 0
+	
+	#Get the lines in the image, to find the orientation of the text in the image
+	lines = cv2.HoughLinesP(edged, 1, np.pi/180, 100, None, 20, 20)
+
+	if lines is not None:
+		for i in range(0, len(lines)):	
+			l = lines[i][0]
+			#Get the angle of the line in degrees, mod 180 to convert all angles to range [0,180)
+			#keeps negative angles out of the problem, easier to measure how far from horizontal
+			angle = getAngle(l[0], l[1], l[2], l[3]) % 180
+				
+			#if the angle is in the range [0,15] degrees or [165,180], it will be considered horizontal.
+			if (angle >= 0 and angle <= 15) or (angle >= 165 and angle <= 180):
+				numHoriz+=1
+				cv2.line(image, (l[0], l[1]), (l[2], l[3]), (0,255,0), 3) #TODO remove this line
+			#if the angle is in the range 90 +/- 15 degrees, it will be considered vertical
+			elif angle >= 75 and angle <= 105:
+				numVert+=1
+				cv2.line(image, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3) #TODO remove this
+			#else, the angle will be assumed to be a random line and will not be counted.
+	
+		#TODO remove till next comment -- debug stuff
+		cv2.imshow("Lines", image)
+		cv2.waitKey(0)
+
+		#at the end of measuring each angle, check whether the image is made up of predominantly horiz. or vert.
+		#lines. This will tell us how text in the ID is oriented.
+		if numHoriz > numVert:
+			return orig
+		elif numVert > numHoriz:
+			return np.rot90(orig) #rotate the image 90 degrees counter clockwise to align text horiz.
+		else:
+			return orig
+#end of correctOrientation
+
+
+#start of getAngle()
+#	This function expects 2 cartesian coordinate pairs (representing a line) and calculates the polar angle from
+#	horizontal that relates them. Returns the angle in degrees. 
+def getAngle(x1, y1, x2, y2):
+	radians = math.atan2(y2-y1, x2-x1)
+	degrees = math.degrees(radians)
+	return degrees
+#end of getAngle
