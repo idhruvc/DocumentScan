@@ -100,7 +100,7 @@ def removeBorder(image):
 	#loop until the background is removed, adjusting gaussian blur settings each pass, with a maximum of
 	#5 passes. If the outline not found after 5 passes, original image is returned.
 	while background is True and i < 5:
-		edged = cv2.GaussianBlur(gray.copy(), (size, size), 0)
+		edged = cv2.GaussianBlur(gray.copy(), (size, size), 1)
 		edged = cv2.Canny(edged, 0, 150)
 		edged = cv2.morphologyEx(edged, cv2.MORPH_CLOSE, element)
 		

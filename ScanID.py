@@ -22,12 +22,12 @@ import numpy as np
 #global variable declaration
 GOOD_MATCH_PERCENT = .15
 SRC_PATH = "/Users/ngover/Documents/TestPrograms/Images/"
-IMG = "Samples/TX_V_test12.png"
-BLUR_THRESHOLD = 15 # TODO mess around with this
+IMG = "Samples/TX_H_test22.png"
+BLUR_THRESHOLD = 36 # TODO mess around with this
 DARKNESS_THRESHOLD = 50 # TODO mess with this
 NAME_WHITELIST="--oem 0 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 NUM_WHITELIST="--oem 0 -c tessedit_char_whitelist=0123456789-/" #this whitelist can be passed when the input is expected to be a date
-ADDR_WHITELIST="--oem 0 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890-"
+ADDR_WHITELIST="--oem 0 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890-#"
 
 
 #start of main
@@ -84,21 +84,31 @@ def buildDocument(img):
 		myDoc.state = getattr(templateData, "state")
 
 		#get coordinates of the ROIs from the document template
-		#retrieve first name coordinates from template, get text from image, assign to object
-		coords = getattr(templateData, "first")
-		myDoc.first = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NAME_WHITELIST)
-		#retrieve last name coordinates from template, get text from image, assign to object
-		coords = getattr(templateData, "last")
-		myDoc.last = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NAME_WHITELIST)
+		
+		#retrieve name coordinates from template, get text from image, process into the fields based on how the name
+		#is formatted (order of fields, commas/not, num lines, etc.)
+		coords = getattr(templateData, "name")
+		nameFormat = getattr(templateData, "nameFormat")
+		#lambda to turn nameFormat into how many lines input is expected to be
+		lines = lambda l: int(l > 2) + 1
+		if nameFormat is 1:
+			whitelist = NAME_WHITELIST + ","
+		else:
+			whitelist = NAME_WHITELIST
+		name = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], whitelist, lines(nameFormat))
+		myDoc.last, myDoc.first = parseName(name, nameFormat)
+		
 		#retrieve Address coordinates from template, get text from image, assign to object
 		coords = getattr(templateData, "address")
-		myDoc.address = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], ADDR_WHITELIST)
+		myDoc.address = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], ADDR_WHITELIST, 2)
+		
 		#retrieve DOB coordinates from template, get text from image, assign to object
 		coords = getattr(templateData, "dob")
-		myDoc.dob= readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NUM_WHITELIST)
+		myDoc.dob= readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NUM_WHITELIST, 1)
+		
 		#retrieve expiration coordinates from template, get text from image, assign to object
 		coords = getattr(templateData, "expiration")
-		myDoc.expiration = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NUM_WHITELIST)
+		myDoc.expiration = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NUM_WHITELIST, 1)
 
 	#TODO remove -- display for debugging/testing
 	cv2.imshow("Original", imutils.resize(img, height=500))
@@ -141,7 +151,13 @@ def preScreen(img):
 
 	
 #start of selectTemplate
-#	TODO
+#	This function is passed an image, the flag returned from removeBorder() and the location of the folder containing the tepmlates
+#	file system. The program first checks if the background is still in the image. If there is not a background, the function
+#	can tell without using any searching/matching process whether the license is vertical or horizontal based on aspect ratio.
+#	Then, the function loops through all the identifiers that distinguish each category of document. After this search, the 
+#	function checks whether it has enough information to identify the document it has. If it does, it returns the template and
+#	the corresponding name of the template. If it does not, it performs a secondary search which looks for unique identifiers
+#	for each derived form of the document, then returns the best match.
 def selectTemplate(img, background, location=SRC_PATH+"Templates/"):
 	h,w = img.shape[:2]
 	orientation = ""
@@ -175,10 +191,10 @@ def selectTemplate(img, background, location=SRC_PATH+"Templates/"):
 		bestTemplate = cv2.imread(location + form + ".jpg")
 	elif os.path.isfile(location + form + ".png"):
 		bestTemplate = cv2.imread(location + form + ".png")
-	#if the first two branches of elif fail, then the file does not exist, that means one of two cases:
+	#if the first two branches of elif fail, then the file does not exist, that means one of 3 cases:
 	#1. outline of document was not found to assign a vertical or horizontal orientation
-	#2. Layout was not found (some states, such as oregon have different formats with DL picture on the left or right side.
-	#3. (most unlikely) false match to the state/template occurred in the first loop/
+	#2. outline found, but there are multiple forms of the document with the determined orientation
+	#3. (most unlikely) false positive match to the state/template occurred in the first loop
 	elif background is True:
 		#go into features subdirectory, this contains all the unique features for each license type. The best match will contain
 		#the form name in the filename. The form exists between the first underscore and the file extension. 
@@ -217,7 +233,7 @@ def multiScaleTemplateSelect(img, location):
 			(tH, tW) = template.shape[:2]
 
 			#Loop over different scales of the image
-			for scale in np.linspace(0.1, .5, 15)[::-1]:
+			for scale in np.linspace(0.1, .5, 20)[::-1]:
 				resized = imutils.resize(grayImg, width=int(grayImg.shape[1] * scale))
 
 				#Break if the resized image is smaller than the template.	
@@ -232,7 +248,7 @@ def multiScaleTemplateSelect(img, location):
 				result = cv2.matchTemplate(edgedImg, edgedTemplate, cv2.TM_CCORR_NORMED)
 				minScore,maxScore,_,_ = cv2.minMaxLoc(result)
 				
-				print("FILE: {}, SCORE: {}".format(filename, maxScore)) #TODO remove -- for debug
+#				print("FILE: {}, SCORE: {}".format(filename, maxScore)) #TODO remove -- for debug
 
 				if maxScore > bestScore:
 					bestScore = maxScore
@@ -254,9 +270,9 @@ def alignToTemplate(img, template):
 	#image prep to improve OCR and alignment
 	imgClean = cleanImage(img)
 	templateClean = cleanImage(template)
-
+	
 	# Detect image keypoints & descriptors using the BRISK algorithm
-	akaze = cv2.BRISK_create()
+	akaze = cv2.AKAZE_create()
 	imgKeypoints, imgDescriptors = akaze.detectAndCompute(imgClean, None)
 	templateKeypoints, templateDescriptors = akaze.detectAndCompute(templateClean, None)
 	
@@ -296,11 +312,8 @@ def drawBoxes(img, docType):
 	# dob
 	coords = getattr(templateData, "dob")
 	cv2.rectangle(img, coords[0], coords[1], (0,255,0), 3)
-	# Last
-	coords = getattr(templateData, "last")
-	cv2.rectangle(img, coords[0], coords[1], (0,255,0), 3)
-	# First
-	coords = getattr(templateData, "first")
+	# name
+	coords = getattr(templateData, "name")
 	cv2.rectangle(img, coords[0], coords[1], (0,255,0), 3)
 	# address
 	coords = getattr(templateData, "address")
@@ -318,23 +331,24 @@ def drawBoxes(img, docType):
 # 	for characters included in the whitelist that gets passed to the function. The calling function should know what
 #	kind of input to expect. If it is looking for a date/SSN/DL#/etc, it can pass a different whitelist than if it
 #	were looking for a name.
-def readROI(roi, whitelist):
+def readROI(roi, whitelist, numLines):
 	#date is one line, approximate to get it close to 300 dpi, which is optimal for OCR
-	if whitelist is NUM_WHITELIST: 
-		roi = imutils.resize(roi, height=55)
+	if whitelist is NUM_WHITELIST and numLines == 1: 
+		roi = imutils.resize(roi, height=65)
 	#name is one line, we'll approximate to get close to 300 dpi, which is optimal for OCR.
-	elif whitelist is NAME_WHITELIST:
-		roi = imutils.resize(roi, height=75)
-	#address is 2 lines, set height to try to get as close to 300 dpi as possible
-	elif whitelist is ADDR_WHITELIST:
-		roi = imutils.resize(roi, height=150)
+	elif numLines == 1:
+		roi = imutils.resize(roi, height=43)
+	#2 lines, set height to try to get as close to 300 dpi as possible
+	elif numLines == 2:
+		roi = imutils.resize(roi, height=125)
+	#else, read the image as passed.
 
 	# prep image w/ resize, color convert, noise reduction & threshold
 	roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY) 
 	roi = cv2.GaussianBlur(roi, (9,9), 0)
 	roi = cv2.adaptiveThreshold(roi, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 7) 
-	kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 1))
-	roi = cv2.morphologyEx(roi, cv2.MORPH_CLOSE, kernel)
+#	kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 1))
+#	roi = cv2.morphologyEx(roi, cv2.MORPH_CLOSE, kernel)
 
 	#add a white border to the image to make it easier for OCR
 	roi = cv2.copyMakeBorder(roi, 100, 100, 100, 100, cv2.BORDER_CONSTANT, value=255)
@@ -354,7 +368,7 @@ def readROI(roi, whitelist):
 
 	#Fix to common OCR bug where tesseract reads '/' in dates as '1'.
 	if whitelist is NUM_WHITELIST:
-		result = result.replace(" ","").strip()
+		result = result.replace(" ","").replace("\n", "").strip()
 		#if the line is 10 chars long, and there are 1s where slashes expected, replace the 1s at expected
 		#indeces with '/'
 		if len(result) is 10 and (result[2] == '1' or result[5] == '1'):		
@@ -367,17 +381,39 @@ def readROI(roi, whitelist):
 #end of readROI
 
 
+#start of parseName
+#
+def parseName(name, nameFormat):
+
+	try:
+		if nameFormat == 1: #FN LN TODO Not sure how to know where to break up a name w/o delimiters
+			return "", name.strip()
+		elif nameFormat == 2: #LN, FN
+			names = name.split(",")
+			return names[0].strip().replace(",",""), names[1].strip().replace(",","")
+		elif nameFormat == 3: #LN\nFN
+			names = name.split("\n")
+			return names[0].strip(), names[1].strip()
+		elif nameFormat == 4:
+			names = name.split("\n")
+			return names[1].strip(), names[0].strip()
+		else:
+			#invalid nameFormat identifier (see templateData.py for correct formats)
+			return "", ""
+	except:
+		return "", name.strip()
+
 #start of cleanImage
 #	This function optomizes an image before it is passed to one of the openCV matching/alignment
-#	methods. The function first converts the image to greyscale, then performs a noise reduction thru use
-#	of gaussian blur and dilation/erosion
+#	methods. The function first converts the image to greyscale, then performs a simple noise
+#	reduction.
 def cleanImage(img):
-	kernel = np.ones((3,3), np.uint8)
+#	kernel = np.ones((3,3), np.uint8)
         # img prep (color, blur correction, noise removal)
 	imgClean = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-	imgClean = cv2.GaussianBlur(imgClean, (3,9), 15) 
-	imgClean = cv2.dilate(imgClean, kernel, iterations=1)
-	imgClean = cv2.erode(imgClean, kernel, iterations=1)
+	imgClean = cv2.GaussianBlur(imgClean, (5,5), 0) 
+#	imgClean = cv2.dilate(imgClean, kernel, iterations=1)
+#	imgClean = cv2.erode(imgClean, kernel, iterations=1)
 	return imgClean
 #end of cleanImage
 
