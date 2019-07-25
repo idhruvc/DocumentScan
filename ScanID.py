@@ -22,7 +22,7 @@ import numpy as np
 #global variable declaration
 GOOD_MATCH_PERCENT = .15
 SRC_PATH = "/Users/ngover/Documents/TestPrograms/Images/"
-IMG = "Samples/TX_H_test22.png"
+IMG = "Samples/TX_H_test44.png"
 BLUR_THRESHOLD = 36 # TODO mess around with this
 DARKNESS_THRESHOLD = 50 # TODO mess with this
 NAME_WHITELIST="--oem 0 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -69,17 +69,29 @@ def buildDocument(img):
 	imgAligned = alignToTemplate(img, template)
 	
 	if docType.startswith("SSN"): # social security card, process as such	
-		# TODO
-		print("Social Security Card!")
-		myDoc = None
+		myDoc = document.SocialSecurity()
+		#access the SSN card's data & ROIs from the TemplateData module
+		templateData = getattr(templates, docType)
+		myDoc.category = getattr(templateData, "category")
+		myDoc.orientation = getattr(templateData, "orientation")
+		
+		#retrieve ssn ROI from document template
+		coords = getattr(templateData, "ssn")
+		myDoc.ssn = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NUM_WHITELIST, 1)	
+		
+		#retrieve name ROI from document template
+		coords = getattr(templateData, "name")
+		myDoc.name = readROI(imgAligned[coords[0][1]:coords[1][1], coords[0][0]:coords[1][0]], NAME_WHITELIST, 1)
+
 	elif docType.startswith("PP"): # document is a passport, process as such
 		# TODO
-		print("Passport!")
 		myDoc = None
+
 	else: # document is an ID
 		myDoc = document.License()
 		#access the license's data & ROIs from the TemplateData module
 		templateData = getattr(templates, docType)
+		myDoc.category = getattr(templateData, "category")
 		myDoc.orientation = getattr(templateData, "orientation")
 		myDoc.state = getattr(templateData, "state")
 
@@ -196,11 +208,17 @@ def selectTemplate(img, background, location=SRC_PATH+"Templates/"):
 	#2. outline found, but there are multiple forms of the document with the determined orientation
 	#3. (most unlikely) false positive match to the state/template occurred in the first loop
 	elif background is True:
-		#go into features subdirectory, this contains all the unique features for each license type. The best match will contain
-		#the form name in the filename. The form exists between the first underscore and the file extension. 
-		#ex filenames: feature1_V.jpg, feature3_H2.png
-		bestFeatureMatch = multiScaleTemplateSelect(img, location + "Features/")
-		form = form + "_" +  bestFeatureMatch.split("_")[1].split('.')[0]
+		#Folder will have a /Features subdirectory if there is more than one form of the doctype
+		if os.path.exists(location + "Features/"):
+			#go into features subdirectory, this contains all the unique features for each license type.
+			#The best match will contain
+			bestFeatureMatch = multiScaleTemplateSelect(img, location + "Features/")
+			form = form + "_" +  bestFeatureMatch.split("_")[1].split('.')[0]
+		#Else, the only image in the directory should be the correct form.
+		else:
+			for filename in os.listdir(location):
+				if filename.endswith(".png") or filename.endswith (".jpg"):
+					form  = filename.split(".")[0]
 
 		#now that we have form name, attempt to read the CORRECT template from the /Templates/State/ folder.
 		bestTemplate = None
