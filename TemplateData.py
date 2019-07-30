@@ -22,6 +22,8 @@
 
 class SSN_H:
 	orientation = "HORIZONTAL"
+	ssn = ((630, 490), (1395, 580))
+	name = ((270, 670), (1736, 781))
 	nameFormat = 1
 
 class TX_V:
@@ -36,10 +38,10 @@ class TX_V:
 class TX_H:
 	state = "TEXAS"
 	orientation = "HORIZONTAL"
-	dob = ((632, 425), (1200, 516))
-	name = ((506, 510), (1271, 621))
-	address = ((512, 635), (1259, 760))
-	expiration = ((1175, 368), (1535, 460))
+	dob = ((800, 545), (1360, 635))
+	name = ((645, 650), (1750, 767))
+	address = ((645, 845), (1750, 975))
+	expiration = ((1510, 460), (1955, 545))
 	nameFormat = 3
 
 class OR_H2:

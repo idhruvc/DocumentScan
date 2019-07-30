@@ -1,8 +1,6 @@
 import cv2
 import numpy as np
-#from matplotlib import pyplot as plt
 import imutils
-import sys
 import math
 
 #start of OrderPoints
@@ -73,13 +71,13 @@ def transformFromPoints(image, pts):
 #end of transformFromPoints
 
 
-#start of removeBorder()
+#start of removeBackground()
 #	This function is given an image and attempts to remove the background from the image. The function
 #	uses thresholding and contour approximation to estimate a rectangular bounding box and perform a 
 #	perspective warp to make the image appear as if it were taken from directly above the document.
 #	Returns: warped - Image w/o background. If a document was not located, this will be the original img.
 #		 background - Flag variable. True if background is still in the picture, False if it was removed.
-def removeBorder(image):
+def removeBackground(image):
 	background = True
 	minContourArea = 10000
 	i = 0	
@@ -100,7 +98,7 @@ def removeBorder(image):
 	#loop until the background is removed, adjusting gaussian blur settings each pass, with a maximum of
 	#5 passes. If the outline not found after 5 passes, original image is returned.
 	while background is True and i < 5:
-		edged = cv2.GaussianBlur(gray.copy(), (size, size), 1)
+		edged = cv2.GaussianBlur(gray.copy(), (size, size), 0)
 		edged = cv2.Canny(edged, 0, 150)
 		edged = cv2.morphologyEx(edged, cv2.MORPH_CLOSE, element)
 		
@@ -121,7 +119,7 @@ def removeBorder(image):
 			approx = cv2.approxPolyDP(c, 0.1 * peri, True)
 			#bounding poly must be rectangular and contour area must be bigger than 10000 to avoid
 			#selecting random boxes in the image.
-			if len(approx) == 4 and cv2.contourArea(c) >= minContourArea:
+			if len(approx) == 4 and cv2.contourArea(approx) >= minContourArea:
 				screenCnt = approx
 				break		
 		try:
@@ -189,7 +187,7 @@ def findFaces(image):
 		copy = image.copy()
 		gray = cv2.cvtColor(copy, cv2.COLOR_BGR2GRAY)
 		#Now, generate a list of rectangles for all detected faces in the image.
-		faces = faceCascade.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=15, minSize=(30,30))
+		faces = faceCascade.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=13, minSize=(30,30))
 		#TODO remove the imshow
 		for (x,y,w,h) in faces:
 			cv2.rectangle(copy, (x,y), (x+w, y+h), (0,255,0), 2)
