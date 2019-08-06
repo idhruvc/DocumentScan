@@ -31,16 +31,16 @@ class TX_V:
 	orientation = "VERTICAL"
 	dob = ((1320, 1565), (2200, 1725))
 	name = ((165, 2310), (2095, 2552))
-        address = ((171, 2679), (1749, 2904))
-	expiration = ((1390, 2063), (2200, 2350))
+        address = ((171, 2679), (1749, 2874))
+	expiration = ((1390, 2115), (2200, 2310))
 	nameFormat = 3
 
 class TX_H:
 	state = "TEXAS"
 	orientation = "HORIZONTAL"
 	dob = ((800, 545), (1360, 635))
-	name = ((645, 650), (1750, 767))
-	address = ((645, 845), (1750, 975))
+	name = ((645, 650), (1600, 767))
+	address = ((645, 845), (1600, 975))
 	expiration = ((1510, 460), (1955, 545))
 	nameFormat = 3
 

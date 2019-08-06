@@ -96,7 +96,7 @@ def removeBackground(image):
 	element = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3), (1,1))
 	
 	#loop until the background is removed, adjusting gaussian blur settings each pass, with a maximum of
-	#5 passes. If the outline not found after 5 passes, original image is returned.
+	#7 passes. If the outline not found after 7 passes, original image is returned.
 	while background is True and i < 5:
 		edged = cv2.GaussianBlur(gray.copy(), (size, size), 0)
 		edged = cv2.Canny(edged, 0, 150)
@@ -163,6 +163,9 @@ def removeBackground(image):
 
 	#if loop terminates and outline not found, return original image
 	if background is True:
+		faces, rotations = findFaces(orig)
+		for j in range(0, rotations):
+			orig = np.rot90(orig)
 		warped = orig
 	
 	#TODO remove -- image display for debug
@@ -187,7 +190,7 @@ def findFaces(image):
 		copy = image.copy()
 		gray = cv2.cvtColor(copy, cv2.COLOR_BGR2GRAY)
 		#Now, generate a list of rectangles for all detected faces in the image.
-		faces = faceCascade.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=13, minSize=(30,30))
+		faces = faceCascade.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=10, minSize=(35,35))
 		#TODO remove the imshow
 		for (x,y,w,h) in faces:
 			cv2.rectangle(copy, (x,y), (x+w, y+h), (0,255,0), 2)

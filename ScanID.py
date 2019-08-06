@@ -18,8 +18,8 @@ import numpy as np
 #global variable declaration
 GOOD_MATCH_PERCENT = .15
 SRC_PATH = "/Users/ngover/Documents/TestPrograms/Images/"
-IMG = "Samples/TX_H_test19.png"
-BLUR_THRESHOLD = 36 # TODO mess around with this
+IMG = "Samples/test47.jpg"
+BLUR_THRESHOLD = 34
 DARKNESS_THRESHOLD = 50
 
 #start of main
@@ -27,6 +27,7 @@ DARKNESS_THRESHOLD = 50
 #	then aligning the image to the template, then pulling the data from the ID by referencing the location
 #	of the bounding boxes which are expected to contain the text we are interested in.
 def main():
+	
 	img = cv2.imread(SRC_PATH + IMG)
 
 	if img is None:
@@ -118,7 +119,7 @@ def selectTemplate(img, background, location=SRC_PATH+"Templates/"):
 
 	#Get the filename of the format that had the best match in the input image. the split() function gives the name of the file without
 	#the .jpg or .png extension.
-	form = multiScaleTemplateSelect(img, location).split('.')[0]
+	form = multiScaleTemplateSelect(img, location, background).split('.')[0]
 
 	print("Searching " + form + " directory...")	
 	
@@ -141,7 +142,7 @@ def selectTemplate(img, background, location=SRC_PATH+"Templates/"):
 		if os.path.exists(location + "Features/"):
 			#go into features subdirectory, this contains all the unique features for each license type.
 			#The best match will contain
-			bestFeatureMatch = multiScaleTemplateSelect(img, location + "Features/")
+			bestFeatureMatch = multiScaleTemplateSelect(img, location + "Features/", background)
 			form = form + "_" +  bestFeatureMatch.split("_")[1].split('.')[0]
 		#Else, the only image in the directory should be the correct form.
 		else:
@@ -165,22 +166,40 @@ def selectTemplate(img, background, location=SRC_PATH+"Templates/"):
 #	location. The function is also passed the image itself as an openCV object. The function loops over multiple scales
 #	of the input image, trying to match each template file in the subdirectory to the image. When the loop finishes, the filename
 #	of the image that best matched the input image is returned in the form of a string.
-def multiScaleTemplateSelect(img, location):
+def multiScaleTemplateSelect(img, location, background):
 	grayImg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-	grayImg = cv2.GaussianBlur(grayImg, (5,5), 0)
-	bestScore = 0
+	grayImg = cv2.GaussianBlur(grayImg, (3,3), 0)
 	
+	#if background has NOT been removed yet, increase scale of the image, we will have more space to search. If the background
+	#is already removed, we don't have to resize, the algorithm will run quicker.
+	if not background:
+		if grayImg.shape[0] > grayImg.shape[1]: #if height > width
+			grayImg = imutils.resize(grayImg, height=500)
+		elif grayImg.shape[1] > grayImg.shape[0]:
+			grayImg = imutils.resize(grayImg, width=500)
+	elif grayImg.shape[0] > 2000:
+		grayImg = imutils.resize(grayImg, height=1500)
+	elif grayImg.shape[1] > 2000:
+		grayImg = imutils.resize(grayImg, width=1500)
+	else:
+		print("DIMENSIONS: {}x{}".format(grayImg.shape[0], grayImg.shape[1]))
+
+	bestScore = 0
+	bestMatch = None
+
 	#Loop through all files in the subdirectory stored in the variable location
 	for filename in os.listdir(location):
 		if filename.endswith(".png") or filename.endswith(".jpg"): #All the templates expected to be jpg/png files
 			template = cv2.imread(location + filename)
-			template = imutils.resize(template, height=30)
+			template = imutils.resize(template, height=45)
 			grayTemplate = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-			grayTemplate = cv2.GaussianBlur(grayTemplate, (5,5), 0)
+			grayTemplate = cv2.GaussianBlur(grayTemplate, (1,1), 0)
 			(tH, tW) = template.shape[:2]
 
+			bestStateScore = 0 # TODO TODO TODO remove			
+
 			#Loop over different scales of the image
-			for scale in np.linspace(0.1, .5, 20)[::-1]:
+			for scale in np.linspace(0.1, 1.0, 30)[::-1]:
 				resized = imutils.resize(grayImg, width=int(grayImg.shape[1] * scale))
 
 				#Break if the resized image is smaller than the template.	
@@ -188,18 +207,25 @@ def multiScaleTemplateSelect(img, location):
 					break
 
 				#Edge detection
-				edgedImg = cv2.Canny(resized, 0, 200)
-				edgedTemplate = cv2.Canny(grayTemplate, 0, 200)
+				edgedImg = cv2.Canny(resized, 50, 250)
+				edgedTemplate = cv2.Canny(grayTemplate, 50, 250)
 				
 				#get list of matches, compare best match score to bestScore
 				result = cv2.matchTemplate(edgedImg, edgedTemplate, cv2.TM_CCORR_NORMED)
-				minScore,maxScore,_,_ = cv2.minMaxLoc(result)
-				
-#				print("FILE: {}, SCORE: {}".format(filename, maxScore)) #TODO remove -- for debug
+				minScore,maxScore,_,_ = cv2.minMaxLoc(result)	
+					
+				#TODO TODO TODO remove this if block
+				if maxScore > bestStateScore:
+					bestStateScore = maxScore
 
 				if maxScore > bestScore:
 					bestScore = maxScore
 					bestMatch = filename
+					#more than a 50% match is a pretty good match. This is to save time on the search.
+					if maxScore > 0.5:
+						print("BEST MATCH: {}, SCORE: {},".format(bestMatch,bestScore))
+						return bestMatch
+			print("FILE: {}, SCORE: {}".format(filename, bestStateScore)) #TODO TODO TODO remove this
 
 	print("BEST MATCH: {}, SCORE: {}".format(bestMatch, bestScore)) #TODO remove-- this was for debug
 	return bestMatch
@@ -219,9 +245,9 @@ def alignToTemplate(img, template):
 	templateClean = cleanImage(template)
 	
 	# Detect image keypoints & descriptors using the BRISK algorithm
-	akaze = cv2.BRISK_create()
-	imgKeypoints, imgDescriptors = akaze.detectAndCompute(imgClean, None)
-	templateKeypoints, templateDescriptors = akaze.detectAndCompute(templateClean, None)
+	brisk = cv2.BRISK_create()
+	imgKeypoints, imgDescriptors = brisk.detectAndCompute(imgClean, None)
+	templateKeypoints, templateDescriptors = brisk.detectAndCompute(templateClean, None)
 	
 	# Match corresponding features between the images
 	descriptorMatcher = cv2.DescriptorMatcher_create(cv2.DESCRIPTOR_MATCHER_BRUTEFORCE_HAMMING)
