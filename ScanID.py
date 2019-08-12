@@ -2,9 +2,7 @@ import imutils
 import os
 import cv2
 import sys
-from pathlib import Path
 import Document as document
-import TemplateData as templates
 import Transform as transform
 import numpy as np
 
@@ -18,8 +16,7 @@ import numpy as np
 #global variable declaration
 GOOD_MATCH_PERCENT = .15
 SRC_PATH = "/Users/ngover/Documents/TestPrograms/Images/"
-IMG = "Samples/test47.jpg"
-BLUR_THRESHOLD = 34
+BLUR_THRESHOLD = 36
 DARKNESS_THRESHOLD = 50
 
 #start of main
@@ -27,9 +24,25 @@ DARKNESS_THRESHOLD = 50
 #	then aligning the image to the template, then pulling the data from the ID by referencing the location
 #	of the bounding boxes which are expected to contain the text we are interested in.
 def main():
+	fullPath = SRC_PATH + "Samples/" + sys.argv[1]
 	
-	img = cv2.imread(SRC_PATH + IMG)
-
+	#add file extension if the entry did not already have it.
+	if fullPath.endswith(".png") or fullPath.endswith(".jpg") or fullPath.endswith(".jpeg"):
+		img = cv2.imread(fullPath)
+	else:
+		if os.path.isfile(fullPath + ".png"):
+			img = cv2.imread(fullPath + ".png")
+		elif os.path.isfile(fullPath + ".jpg"):
+			img = cv2.imread(fullPath + ".jpg")
+		elif os.path.isfile(fullPath + ".jpeg"):
+			img = cv2.imread(fullPath + ".jpeg")
+		elif fullPath.endswith(".pdf"):
+			img = None	
+		elif os.path.isfile(fullPath + ".pdf"):
+			img = None
+		else:
+			img = None
+	
 	if img is None:
 		print("Image could not be opened.")
 		sys.exit(0)
@@ -54,12 +67,12 @@ def main():
 	print("\n" + myDoc.__str__())
 		
 	#TODO remove -- display for debugging/testing
-	cv2.imshow("Original", imutils.resize(img, height=500))
-	cv2.imshow("Template Selection", imutils.resize(template, height=500))
-	cv2.imshow("Original Aligned to Template", imutils.resize(drawBoxes(imgAligned, docType), height=500))
-	cv2.waitKey(0)
-	cv2.destroyAllWindows()
-	
+#	cv2.imshow("Original", imutils.resize(img, height=500))
+#	cv2.imshow("Template Selection", imutils.resize(template, height=500))
+#	cv2.imshow("Original Aligned to Template", imutils.resize(drawBoxes(imgAligned, docType), height=500))
+#	cv2.waitKey(0)
+#	cv2.destroyAllWindows()
+
 	return myDoc
 #end of main
 
@@ -73,7 +86,7 @@ def preScreen(img):
 	gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 	focusMeasure = cv2.Laplacian(gray, cv2.CV_64F).var()
 	
-	print("Focus measure: {}".format(focusMeasure))
+#	print("Focus measure: {}".format(focusMeasure))
 	
 	#check whether the value is above or beneath the threshold for blur
 	if focusMeasure < BLUR_THRESHOLD:
@@ -83,7 +96,7 @@ def preScreen(img):
 	#(more true to document readability when background is successfully removed)
 	light = np.mean(img)
 
-	print("Darkness level: {}".format(light))	
+#	print("Darkness level: {}".format(light))	
 
 	if light < DARKNESS_THRESHOLD:
 		return False
@@ -114,14 +127,14 @@ def selectTemplate(img, background, location=SRC_PATH+"Templates/"):
 			orientation = "_H"
 
 	#TODO remove this -- for debug
-	cv2.imshow("Corrected", imutils.resize(img, height=500))
-	cv2.waitKey(0)
+#	cv2.imshow("Corrected", imutils.resize(img, height=500))
+#	cv2.waitKey(0)
 
 	#Get the filename of the format that had the best match in the input image. the split() function gives the name of the file without
 	#the .jpg or .png extension.
 	form = multiScaleTemplateSelect(img, location, background).split('.')[0]
 
-	print("Searching " + form + " directory...")	
+#	print("Searching " + form + " directory...")	
 	
 	#update location to be the subdirectory containing all of the images for the specified form
 	location = location + form + "/"
@@ -162,6 +175,7 @@ def selectTemplate(img, background, location=SRC_PATH+"Templates/"):
 		
 
 #start of multiScaleTemplateSelect()
+#	This function is called by selectTemplate to find and record template match scores.
 #	This function loops through all templates in the subdirectory, whose path is stored as a string in the variable named
 #	location. The function is also passed the image itself as an openCV object. The function loops over multiple scales
 #	of the input image, trying to match each template file in the subdirectory to the image. When the loop finishes, the filename
@@ -172,17 +186,10 @@ def multiScaleTemplateSelect(img, location, background):
 	
 	#if background has NOT been removed yet, increase scale of the image, we will have more space to search. If the background
 	#is already removed, we don't have to resize, the algorithm will run quicker.
-	if not background:
-		if grayImg.shape[0] > grayImg.shape[1]: #if height > width
-			grayImg = imutils.resize(grayImg, height=500)
-		elif grayImg.shape[1] > grayImg.shape[0]:
-			grayImg = imutils.resize(grayImg, width=500)
-	elif grayImg.shape[0] > 2000:
-		grayImg = imutils.resize(grayImg, height=1500)
-	elif grayImg.shape[1] > 2000:
-		grayImg = imutils.resize(grayImg, width=1500)
-	else:
-		print("DIMENSIONS: {}x{}".format(grayImg.shape[0], grayImg.shape[1]))
+	if grayImg.shape[0] > grayImg.shape[1]: #if height > width
+		grayImg = imutils.resize(grayImg, height=500)
+	elif grayImg.shape[1] > grayImg.shape[0]:
+		grayImg = imutils.resize(grayImg, width=500)
 
 	bestScore = 0
 	bestMatch = None
@@ -190,15 +197,18 @@ def multiScaleTemplateSelect(img, location, background):
 	#Loop through all files in the subdirectory stored in the variable location
 	for filename in os.listdir(location):
 		if filename.endswith(".png") or filename.endswith(".jpg"): #All the templates expected to be jpg/png files
+			if bestMatch is None:
+				bestMatch = filename			
+
 			template = cv2.imread(location + filename)
-			template = imutils.resize(template, height=45)
+			template = imutils.resize(template, height=35)
 			grayTemplate = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
 			grayTemplate = cv2.GaussianBlur(grayTemplate, (1,1), 0)
 			(tH, tW) = template.shape[:2]
 
-			bestStateScore = 0 # TODO TODO TODO remove			
+			bestStateScore = 0 # TODO remove -- debug			
 
-			#Loop over different scales of the image
+			#Loops through 30 different scaled images in the range from 100% to 10% the image's size.
 			for scale in np.linspace(0.1, 1.0, 30)[::-1]:
 				resized = imutils.resize(grayImg, width=int(grayImg.shape[1] * scale))
 
@@ -214,7 +224,7 @@ def multiScaleTemplateSelect(img, location, background):
 				result = cv2.matchTemplate(edgedImg, edgedTemplate, cv2.TM_CCORR_NORMED)
 				minScore,maxScore,_,_ = cv2.minMaxLoc(result)	
 					
-				#TODO TODO TODO remove this if block
+				#TODO TODO TODO remove this if block -- debug
 				if maxScore > bestStateScore:
 					bestStateScore = maxScore
 
@@ -223,11 +233,11 @@ def multiScaleTemplateSelect(img, location, background):
 					bestMatch = filename
 					#more than a 50% match is a pretty good match. This is to save time on the search.
 					if maxScore > 0.5:
-						print("BEST MATCH: {}, SCORE: {},".format(bestMatch,bestScore))
+#						print("BEST MATCH: {}, SCORE: {},".format(bestMatch,bestScore))
 						return bestMatch
-			print("FILE: {}, SCORE: {}".format(filename, bestStateScore)) #TODO TODO TODO remove this
+#			print("FILE: {}, SCORE: {}".format(filename, bestStateScore)) #TODO remove this
 
-	print("BEST MATCH: {}, SCORE: {}".format(bestMatch, bestScore)) #TODO remove-- this was for debug
+#	print("BEST MATCH: {}, SCORE: {}".format(bestMatch, bestScore)) #TODO remove-- this was for debug
 	return bestMatch
 #end of multiScaleTemplateSelect
 
