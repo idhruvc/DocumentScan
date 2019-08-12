@@ -50,7 +50,7 @@ python ScanID.py /your/image/path/here
 ## Help for Future Development/Troubleshooting:
 To show an image at any step, insert the following cv2 methods, passing the string you want displayed on the window when the image displays itself, and the name of the image itself. Then press any key on the keyboard to close the window.
 ```Python
-cv2.imshow(“foo”, foo)
+cv2.imshow(“foobar”, foo)
 cv2.waitKey(0)
 ```
 
