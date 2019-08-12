@@ -11,7 +11,6 @@ pip install imutils
 pip install numpy
 pip install unidecode
 pip install —upgrade google-cloud-vision
-pip install google-cloud-python
 ```
 NOTE: if you are running the Tesseract OCR branch of the project you will also need the pytesseract library.
 ```bash
