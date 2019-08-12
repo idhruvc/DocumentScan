@@ -7,23 +7,13 @@ This program was built to function as a scanner and reader which can process (cu
 Use the package manager pip to install the necessary client libraries.
 ```bash
 pip install opencv-contrib-python
-```
-```bash
 pip install imutils
-```
-```bash
 pip install numpy
-```
-```bash
 pip install unidecode
-```
-```bash
 pip install —upgrade google-cloud-vision
-```
-```bash
 pip install google-cloud-python
 ```
-NOTE: if you are running the tesseract branch of the project you will also need the tesseract library.
+NOTE: if you are running the Tesseract OCRmbranch of the project you will also need the pytesseract library.
 ```bash
 pip install pytesseract
 ```
@@ -79,5 +69,3 @@ The main problems with the project when I left off:
 * Why does the result say my image quality was too low? 
     * Perhaps the picture is too dark, or too blurry. Try submitting a clearer picture, or lowering the values of BLUR_THRESHOLD and/or DARKNESS_THRESHOLD.
     * There exists a bug where sometimes face detection settings are too low (or too high), and sometimes a bad region selection in the background removal step receives a false-positive result in the face check, which may be a small/random region of the image, which the prescreen function will consider too low resolution and return a bad result.
-
-
