@@ -70,6 +70,7 @@ Common Issues:
 * Template match was correct, but the image did not align correctly:
     * Make sure the template that you’re trying to use is as clean and clear as possible. High resolution, sharp details and even lighting are the gold standard for matching/alignment. 
     * Try adjusting GOOD_MATCH_PERCENT in the ScanID module. I got the best results with 15%-25%, but sometimes there are individual cases where lower or higher values produce better results.
+    * This could also be improved with an improved keypoint detection algorithm. The program currently uses BRISK, but there are (patented) algorithms which work more efficiently and faster, such as SIFT and SURF. I had trouble trying to use them because of the restrictions with the latest version of OpenCV. There are also other free keypoint algorithms (AKAZE, KAZE, ORB, BRISK), but I got the best results with BRISK.
 * Why does the result say my image quality was too low? 
     * Perhaps the picture is too dark, or too blurry. Try submitting a clearer picture, or lowering the values of BLUR_THRESHOLD and/or DARKNESS_THRESHOLD.
     * There exists a bug where sometimes face detection settings are too low (or too high), and sometimes a bad region selection in the background removal step receives a false-positive result in the face check, which may be a small/random region of the image, which the prescreen function will consider too low resolution and return a bad result.
