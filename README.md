@@ -55,8 +55,7 @@ cv2.imshow(“foo”, foo)
 cv2.waitKey(0)
 ```
 
-The main problems with the project when I left off:
-The main problems with the project when I left off:
+Common Issues:
 * OCR accuracy — problems here usually fall into two categories:
     * Tesseract
             * Tesseract OCR returned bad results on a clear image: For example, the letter ‘M’ can be mistakenly read as ‘IVI’. Resizing the image before passing to tesseract usually fixes issues like this. Tesseract results are optimized with black text against a white background at or close to 300dpi, and sometimes the calculated region resize done in the readROI() function of the Document module is not sufficient if the text is unexpectedly small.
