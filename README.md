@@ -56,7 +56,9 @@ cv2.waitKey(0)
 ```
 
 The main problems with the project when I left off:
+
 -OCR accuracy — problems here usually fall into two categories:
+
    -Tesseract
       -Tesseract OCR returned bad results on a clear image: For example, the letter ‘M’ can be mistakenly read as ‘IVI’.
       Resizing the image before passing to tesseract usually fixes issues like this. Tesseract results are optimized with 
@@ -66,29 +68,42 @@ The main problems with the project when I left off:
       thresholded image represents letters. The way to fix this is to adjust erosion/dilation settings and blur size/setting. 
       Conversely, there can be TOO much noise removal, and part of the text can get left out in thresholding, or be too blurr
       y to process correctly.
+      
    -Google Cloud Vision
       -Images have to be resized so that they can all be stitched together on top of each other and batched to GCP in one 
       image, rather than 5 individual ones. While this cuts down the cost, sometimes the warp can interfere with the image 
       clarity, or prompt the API to return an incorrect response.
+      
 -Template Selection inaccuracy:
+
    -Template Select is very dependent on the success of background removal. Getting the license isolated and as aligned as 
    possible is key to good results here. Template matching algorithm expects the license to be as focused as possible and 
    right-side up.
+   
 -This could be fixed by a more robust matching algorithm. The matching function currently loops over different scales of the template image, and records the match at each size. However, this is not as affine to rotation and perspective changes. This could be added into the current algorithm, but it would likely be very slow. The other way to fix this is to modify the match function to look at key point matches rather than laying a template over the image and recording the similarity, however it is more difficult to ‘measure’ a key point match to find the best match score.
+
 -Template Selection Speed:
+
    -The reason the algorithm is somewhat slow is because it has O(N^2) complexity. The outer loop goes through all the 
    template images in a folder, and the inner loop iterates over the image at multiple different sizes and measures the match
    score for each — this is more robust than one fixed size match score for each template, but has its tradeoffs.
+   
    -A smarter way to organize this may be to create a data structure which organizes the templates in order of most to least  
    populated states. Assuming a good picture, the common cases will be faster.
+   
 -Template match was correct, but the image did not align correctly:
+
    -Make sure the template that you’re trying to use is as clean and clear as possible. High resolution, sharp details and 
    even lighting are the gold standard for matching/alignment. 
+   
    -Try adjusting GOOD_MATCH_PERCENT in the ScanID module. I got the best results with 15%-25%, but sometimes there are 
    individual cases where lower or higher values produce better results.
+   
 -Why does the result say my image quality was too low? 
+
    -Perhaps the picture is too dark, or too blurry. Try submitting a clearer picture, or lowering the values of BLUR_THRESHOLD 
    and/or DARKNESS_THRESHOLD.
+
    -There exists a bug where sometimes face detection settings are too low (or too high), and sometimes a bad region selection 
    in the background removal step receives a false-positive result in the face check, which may be a small/random region of 
    the image, which the prescreen function will consider too low resolution and return a bad result.
