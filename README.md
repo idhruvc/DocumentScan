@@ -32,7 +32,7 @@ The project is separated into 4 modules:
 Here is essentially a high-level workflow of the project:
 INSERT
 
-#### Setup and Usage
+## Setup and Usage
 The project expects template data to be organized hierarchically, as shown:
 INSERT
 This makes exploring subdirectories and examining individual features of different documents and forms organized.
