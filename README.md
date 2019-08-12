@@ -37,9 +37,9 @@ The project expects template data to be organized hierarchically, as shown:
 INSERT
 This makes exploring subdirectories and examining individual features of different documents and forms organized.
 
-To run, change the SRC_PATH variable in the ScanID.py module to the absolute path to the parent directory of the /Templates folder
+Before running, change the SRC_PATH variable in the ScanID.py module to the absolute path to the parent directory of the /Templates/ folder.
 
-After this, open a command line environment, and enter one of the following commands. The program only takes one argument, which should be the path to the image you want to pass into the program. You can choose to include or exclude the file extension. Program has the option to leave off the file extension for convenience. Example:
+After this, open a command line environment, and enter one of the following commands to execute. The program only takes one argument, which should be the path to the image you want to pass into the program. You can choose to include or exclude the file extension. Program has the option to leave off the file extension for convenience. Example:
 ```bash
 python ScanID.py /your/image/path/here.png
 ```
@@ -60,10 +60,10 @@ Common Issues:
       * Tesseract OCR returned bad results on a clear image: For example, the letter ‘M’ can be mistakenly read as ‘IVI’. Resizing the image before passing to tesseract usually fixes issues like this. Tesseract results are optimized with black text against a white background at or close to 300dpi, and sometimes the calculated region resize done in the readROI() function of the Document module is not sufficient if the text is unexpectedly small.
       * Insufficient cleanup before passing image to tesseract: Sometimes tesseract can misinterpret that noise leftover in the thresholded image represents letters. The way to fix this is to adjust erosion/dilation settings and blur size/setting. Conversely, there can be TOO much noise removal, and part of the text can get left out in thresholding, or be too blurry to process correctly.
     * Google Cloud Vision
-      * Images have to be resized so that they can all be stitched together on top of each other and batched to GCP in one image, rather than 5 individual ones. While this cuts down the cost, sometimes the warp can interfere with the image clarity, or prompt the API to return an incorrect response.
+      * Images have to be resized so that they can all be stitched together on top of each other and batched to GCP in one image, rather than 5 individual ones. While this cuts down the cost, sometimes the resize can interfere with the image clarity, or cause the API to return an incorrect response.
 * Template Selection inaccuracy:
-    * Template Select is very dependent on the success of background removal. Getting the license isolated and as aligned as possible is key to good results here. Template matching algorithm expects the license to be as focused as possible and right-side up.
-    * This could be fixed by a more robust matching algorithm. The matching function currently loops over different scales of the template image, and records the match at each size. However, this is not as affine to rotation and perspective changes. This could be added into the current algorithm, but it would likely be very slow. The other way to fix this is to modify the match function to look at key point matches rather than laying a template over the image and recording the similarity, however it is more difficult to ‘measure’ a key point match to find the best match score.
+    * Template Select is very dependent on the success of background removal. Getting the license as isolated and aligned as possible is key to good results here. Template matching algorithm expects the license to be as focused as possible and right-side up.
+    * This could be fixed by a more robust matching algorithm. The matching function is a brute-force technique that loops over different scales of the template image, and records the match at each size. However, this is not as affine to rotation and perspective changes. The other way to fix this is to modify the match function to look at key point matches rather than laying a template over the image and recording the similarity, however it is more difficult to ‘measure’ a key point match to find the best match score.
 * Template Selection Speed:
     * The reason the algorithm is somewhat slow is because it has O(N^2) complexity. The outer loop goes through all the template images in a folder, and the inner loop iterates over the image at multiple different sizes and measures the match score for each — this is more robust than one fixed size match score for each template, but has its tradeoffs.
     * A smarter way to organize this may be to create a data structure which organizes the templates in order of most to least populated states. Assuming a good picture, the common cases will be faster.
