@@ -21,10 +21,10 @@ pip install pytesseract
 
 ##Project Organization
 The project is separated into 4 modules:
-Transform.py - This module contains the functions that work to find the outline of the document, make sure the picture is oriented right side up and get a birds-eye-view. Accessed by ScanID when removeBackground() is called
-ScanID.py - Acts as the driver, this module contains main and directs most of the workflow. Contains the functions that select and align the template, and when the program terminates, this module ends up with the object that was created.
-Document.py - Class structure for the base class, Document, and its derived classes, License and SocialSecurity. Building the ID is delegated to the derived class constructors, but to build any generic document, the access point is to call the documentFromImage() function, which drives OCR and object creation calling various methods within this module.
-TemplateData.py - This module contains the data that gets referenced when an object is created, such as coordinates to expect information after the image is aligned to the template image, how the doc owner’s name is formatted, and driver’s license state/orientation (if applicable)
+**Transform.py** - This module contains the functions that work to find the outline of the document, make sure the picture is oriented right side up and get a birds-eye-view. Accessed by ScanID when removeBackground() is called
+**ScanID.py** - Acts as the driver, this module contains main and directs most of the workflow. Contains the functions that select and align the template, and when the program terminates, this module ends up with the object that was created.
+**Document.py** - Class structure for the base class, Document, and its derived classes, License and SocialSecurity. Building the ID is delegated to the derived class constructors, but to build any generic document, the access point is to call the documentFromImage() function, which drives OCR and object creation calling various methods within this module.
+**TemplateData.py** - This module contains the data that gets referenced when an object is created, such as coordinates to expect information after the image is aligned to the template image, how the doc owner’s name is formatted, and driver’s license state/orientation (if applicable)
 Here is essentially a high-level workflow of the project:
 INSERT
 
