@@ -1,9 +1,9 @@
-##### Document Scanner README
+###### Document Scanner README
 
-### Description
+#### Description
 This program was built to function as a scanner and reader which can process (currently) Texas and Oregon IDs. The program first identifies the document, using powerful image/template matching processes from the OpenCV python library. Once the program knows what kind of document it has, it will access its template for that document, align the input image to the blank template, and perform zonal OCR using Pytesseract on the regions of the image that are expected to contain text after alignment. The text retrieved from the image is then assigned to an object for processing. Currently supports JPG and PNG files, with intent to add support for PDFs soon.
 
-### Requirements
+#### Requirements
 Use the package manager pip to install the necessary client libraries.
 ```bash
 pip install opencv-contrib-python
@@ -13,13 +13,13 @@ pip install unidecode
 pip install —upgrade google-cloud-vision
 pip install google-cloud-python
 ```
-NOTE: if you are running the Tesseract OCRmbranch of the project you will also need the pytesseract library.
+NOTE: if you are running the Tesseract OCR branch of the project you will also need the pytesseract library.
 ```bash
 pip install pytesseract
 ```
 
 
-### Project Organization
+#### Project Organization
 The project is separated into 4 modules:
 
 **Transform.py** - This module contains the functions that work to find the outline of the document, make sure the picture is oriented right side up and get a birds-eye-view. Accessed by ScanID when removeBackground() is called
@@ -33,7 +33,7 @@ The project is separated into 4 modules:
 Here is essentially a high-level workflow of the project:
 INSERT
 
-### Setup and Usage
+#### Setup and Usage
 The project expects template data to be organized hierarchically, as shown:
 INSERT
 This makes exploring subdirectories and examining individual features of different documents and forms organized.
@@ -48,7 +48,7 @@ python ScanID.py /your/image/path/here.png
 python ScanID.py /your/image/path/here
 ```
 
-### Help for Future Development/Troubleshooting:
+#### Help for Future Development/Troubleshooting:
 To show an image at any step, insert the following cv2 methods, passing the string you want displayed on the window when the image displays itself, and the name of the image itself. Then press any key on the keyboard to close the window.
 ```Python
 cv2.imshow(“foo”, foo)
