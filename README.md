@@ -1,7 +1,7 @@
 # Document Scanner README
 
 ## Description
-This program was built to function as a scanner and reader which can process (currently) Texas and Oregon IDs. The program first identifies the document, using powerful image/template matching processes from the OpenCV python library. Once the program knows what kind of document it has, it will access its template for that document, align the input image to the blank template, and perform zonal OCR using Pytesseract on the regions of the image that are expected to contain text after alignment. The text retrieved from the image is then assigned to an object for processing. Currently supports JPG and PNG files, with intent to add support for PDFs soon.
+This program was built to function as a scanner and reader which can process (currently) Texas and Oregon IDs. The program first identifies the document, using powerful image/template matching processes from the OpenCV python library. Once the program knows what kind of document it has, it will access its template for that document, align the input image to the blank template, and perform zonal OCR on the regions of the image that are expected to contain text after alignment. The text retrieved from the image is then assigned to an object for processing. Currently supports JPG and PNG files, with intent to add support for PDFs soon.
 
 ## Requirements
 Use the package manager pip to install the necessary client libraries.
