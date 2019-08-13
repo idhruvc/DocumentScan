@@ -16,6 +16,7 @@ NOTE: if you are running the Tesseract OCR branch of the project you will also n
 ```bash
 pip install pytesseract
 ```
+After installing the necessary client libraries, you will need to [enable the Cloud Vision API](https://cloud.google.com/vision/docs/before-you-begin).
 
 
 ## Project Organization
