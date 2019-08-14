@@ -36,7 +36,7 @@ pip install pytesseract
 After installing the necessary client libraries, you will need to [enable the Cloud Vision API](https://cloud.google.com/vision/docs/before-you-begin).
 
 ## Setup and Usage
-The project expects template data to be organized hierarchically - [(visualization)](https://imgur.com/aZHMZHy).
+The project expects template data to be organized hierarchically - [(visualization)](https://imgur.com/HAAobvn).
 This makes exploring subdirectories and examining individual features of different documents and forms organized.
 
 Before running, change the SRC_PATH variable in the Config.py module to the absolute path to the /Templates/ folder.
