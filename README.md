@@ -58,7 +58,9 @@ Tips for submitting test images:
 
 ## Help for Future Development/Troubleshooting:
 Tips for adding templates:
- * Try to use images with the best possible quality. [Horizontal Texas ID](/../master/Templates/TX/TX_H.png?raw=true "TX_H") is a good example that works well.
+ * Try to use images with the best possible quality, high resolution and even lighting. [Horizontal Texas ID](/../master/Templates/TX/TX_H.png?raw=true "TX_H") is a good example that works well.
+ * I've found that using DMV samples as the full template isn't a good practice. They're often too low-quality and watermarked.
+ * OpenCV didn't work too well in my experience with images where the blank fields are left to alpha, a lot of the functions expect 3-channel RGB or greyscale images. I got the best results adding a black background layer instead of leaving the fields transparent.
 
 To show an image at any step, insert the following cv2 methods, passing the string you want displayed on the window when the image displays itself, and the name of the image object. Then press any key on the keyboard to close the window.
 ```Python
