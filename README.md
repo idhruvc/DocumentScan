@@ -81,6 +81,6 @@ Common Issues:
     * This could also be improved with an improved keypoint detection algorithm. The program currently uses BRISK, but there are (patented) algorithms which work more efficiently and faster, such as SIFT and SURF. I had trouble trying to use them because of the restrictions with the latest version of OpenCV. There are also other free keypoint algorithms (AKAZE, KAZE, ORB, BRISK), but I got the best results with BRISK.
 * Why does the result say my image quality was too low? 
     * Perhaps the picture is too dark, or too blurry. Try submitting a clearer picture, or lowering the values of BLUR_THRESHOLD and/or DARKNESS_THRESHOLD.
-    * There exists a bug where sometimes face detection settings are too low (or too high), and sometimes a bad region selection in the background removal step receives a false-positive result in the face check, which may be a small/random region of the image, which the prescreen function will consider too low resolution and return a bad result.
+    * There exists a bug where sometimes face detection settings are too low (or too high), and occasionally a bad region selection in the background removal step receives a false-positive or false-negative result in the face check, which may be a small/random region of the image, which the prescreen function will consider too low resolution and return a bad result.
 * SSL Errors:
   * This is a problem with not being able to send the request to GCP. If you've correctly enabled the Visions API, try using a different network.
