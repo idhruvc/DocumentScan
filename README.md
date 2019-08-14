@@ -16,8 +16,7 @@ The project is separated into 5 modules:
 
 **Config.py** - This module exists to keep global variables in one place. Contains a few threshold values that are referenced during the program's workflow, as well as the SRC_PATH variable which will need to be set before running the program.
 
-Here is essentially a high-level workflow of the project:
-INSERT
+Here is essentially a [high-level workflow diagram](https://imgur.com/aZHMZHy) of the project.
 
 ## Requirements
 Written in Python 2.7.16
@@ -37,8 +36,7 @@ pip install pytesseract
 After installing the necessary client libraries, you will need to [enable the Cloud Vision API](https://cloud.google.com/vision/docs/before-you-begin).
 
 ## Setup and Usage
-The project expects template data to be organized hierarchically, as shown:
-INSERT
+The project expects template data to be organized hierarchically - [(visualization)](https://imgur.com/aZHMZHy).
 This makes exploring subdirectories and examining individual features of different documents and forms organized.
 
 Before running, change the SRC_PATH variable in the Config.py module to the absolute path to the /Templates/ folder.
