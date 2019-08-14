@@ -48,16 +48,17 @@ python ScanID.py /your/image/path/here.png
 python ScanID.py /your/image/path/here
 ```
 
+Tips for submitting test images:
+* Use clean, clear, well-lit images of your ID taken perpendicular to the plane the document is on. if the text is too blurry or glared, OCR will have a tough time.
+* Lay the ID down on a flat surface, optimally against a background that contrasts with the ID.
+  * Try to avoid images where someone is holding their ID in their hand, these are difficult to get good results with because it is much harder to find and isolate a rectangular selection when someone's fingers are in the way of the contour.
+
 ## Help for Future Development/Troubleshooting:
 To show an image at any step, insert the following cv2 methods, passing the string you want displayed on the window when the image displays itself, and the name of the image itself. Then press any key on the keyboard to close the window.
 ```Python
 cv2.imshow(“foobar”, foo)
 cv2.waitKey(0)
 ```
-Tips for submitting test images:
-* Use clean, clear, well-lit images of your ID taken perpendicular to the plane the document is on. if the text is too blurry or glared, OCR will have a tough time.
-* Lay the ID down on a flat surface, optimally against a background that contrasts with the ID.
-  * Try to avoid images where someone is holding their ID in their hand, these are difficult to get good results with because it is much harder to find and isolate a rectangular selection when someone's fingers are in the way of the contour.
 
 Common Issues:
 * OCR accuracy — problems here usually fall into two categories:
