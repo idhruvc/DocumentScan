@@ -30,6 +30,8 @@ The project is separated into 4 modules:
 
 **TemplateData.py** - This module contains the data that gets referenced when an object is created, such as coordinates to expect information after the image is aligned to the template image, how the owner's name is formatted, and driver’s license state/orientation (if applicable)
 
+**Config.py** - This module exists to keep global variables in one place. Contains a few threshold values that are referenced during the program's workflow, as well as the SRC_PATH variable which will need to be set before running the program.
+
 Here is essentially a high-level workflow of the project:
 INSERT
 
@@ -38,7 +40,7 @@ The project expects template data to be organized hierarchically, as shown:
 INSERT
 This makes exploring subdirectories and examining individual features of different documents and forms organized.
 
-Before running, change the SRC_PATH variable in the ScanID.py module to the absolute path to the /Templates/ folder.
+Before running, change the SRC_PATH variable in the Config.py module to the absolute path to the /Templates/ folder.
 
 After this, open a command line environment, and enter one of the following commands to execute. The program only takes one argument, which should be the path to the image you want to pass into the program. You can choose to include or exclude the file extension. Program has the option to leave off the file extension for convenience. Example:
 ```bash
@@ -77,10 +79,10 @@ Common Issues:
     * A smarter way to organize this may be to use a data structure which organizes the templates in order of most to least accessed formats. Assuming a good picture, the common cases will be faster.
 * Template match was correct, but the image did not align correctly:
     * Make sure the template that you’re trying to use is as clean and clear as possible. High resolution, sharp details and even lighting are the gold standard for matching/alignment. 
-    * Try adjusting GOOD_MATCH_PERCENT in the ScanID module. I got the best results with 15%-25%, but sometimes there are individual cases where lower or higher values produce better results.
+    * Try adjusting GOOD_MATCH_PERCENT in the Config module. I got the best results with 15%-25%, but sometimes there are individual cases where lower or higher values produce better results.
     * This could also be improved with an improved keypoint detection algorithm. The program currently uses BRISK, but there are (patented) algorithms which work more efficiently and faster, such as SIFT and SURF. I had trouble trying to use them because of the restrictions with the latest version of OpenCV. There are also other free keypoint algorithms (AKAZE, KAZE, ORB, BRISK), but I got the best results with BRISK.
 * Why does the result say my image quality was too low? 
-    * Perhaps the picture is too dark, or too blurry. Try submitting a clearer picture, or lowering the values of BLUR_THRESHOLD and/or DARKNESS_THRESHOLD.
+    * Perhaps the picture is too dark, or too blurry. Try submitting a clearer picture, or lowering the values of BLUR_THRESHOLD and/or DARKNESS_THRESHOLD in the Config module.
     * There exists a bug where sometimes face detection settings are too low (or too high), and occasionally a bad region selection in the background removal step receives a false-positive or false-negative result in the face check, which may be a small/random region of the image, which the prescreen function will consider too low resolution and return a bad result.
 * SSL Errors:
   * This is a problem with not being able to send the request to GCP. If you've correctly enabled the Visions API, try connecting to a different network.
