@@ -49,7 +49,7 @@ python ScanID.py /your/image/path/here.png
 python ScanID.py /your/image/path/here
 ```
 
-Tips for submitting test images:
+#### Tips for submitting test images:
 * Use clean, clear, well-lit images that capture the entire document without cutting off any corners or edges. 
 * Use images with minimal glare. If the text is too blurry or glared, OCR will have a tough time.
 * Use pictures taken from directly above with minimal skew.
@@ -57,18 +57,19 @@ Tips for submitting test images:
 * Try to avoid images where someone is holding their ID in their hand, these are difficult to get good results with because it is much harder to find and isolate a rectangular selection when someone's fingers interfere with the contour.
 
 ## Help for Future Development/Troubleshooting:
-Tips for adding templates:
+#### Tips for adding templates:
  * Try to use images with the best possible quality, high resolution and even lighting. [Horizontal Texas ID](/../master/Templates/TX/TX_H.png?raw=true "TX_H") is a good example that works well.
  * I've found that using DMV samples as the full template isn't a good practice. They're often too low-quality and watermarked.
  * OpenCV didn't work too well in my experience with images where the blank fields are left to alpha, a lot of the functions expect 3-channel RGB or greyscale images. I got the best results adding a black background layer instead of leaving the fields transparent.
 
+#### Debug:
 To show an image at any step, insert the following cv2 methods, passing the string you want displayed on the window when the image displays itself, and the name of the image object. Then press any key on the keyboard to close the window.
 ```Python
 cv2.imshow(“foobar”, foo)
 cv2.waitKey(0)
 ```
 
-Common Issues:
+#### Common Issues:
 * OCR accuracy — problems here usually fall into two categories:
    * Google Cloud Vision
       * Images have to be resized so that they can all be stitched together on top of each other and batched to GCP in one image, rather than 5 individual ones. While this cuts down the cost, sometimes the resize can interfere with the image clarity, or cause the API to return an incorrect response.
