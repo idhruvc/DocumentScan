@@ -57,6 +57,9 @@ Tips for submitting test images:
 * Try to avoid images where someone is holding their ID in their hand, these are difficult to get good results with because it is much harder to find and isolate a rectangular selection when someone's fingers interfere with the contour.
 
 ## Help for Future Development/Troubleshooting:
+Tips for adding templates:
+ * Try to use images with the best possible quality. [Horizontal Texas ID](/../master/Templates/TX/TX_H.png?raw=true "TX_H") is a good example that works well.
+
 To show an image at any step, insert the following cv2 methods, passing the string you want displayed on the window when the image displays itself, and the name of the image object. Then press any key on the keyboard to close the window.
 ```Python
 cv2.imshow(“foobar”, foo)
