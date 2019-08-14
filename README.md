@@ -74,7 +74,7 @@ Common Issues:
     * This could be fixed by a more robust matching algorithm. The matching function is a brute-force technique that loops over different scales of the template image, and records the match at each size. However, this is not as affine to rotation and perspective changes. The other way to fix this is to modify the match function to look at key point matches rather than laying a template over the image and recording the similarity, however it is more difficult to ‘measure’ a key point match to find the best match score.
 * Template Selection Speed:
     * The reason the algorithm is somewhat slow is because it has O(N^2) complexity. The outer loop goes through all the template images in a folder, and the inner loop iterates over the image at multiple different sizes and measures the match score for each — this is more robust than one fixed size match score for each template, but has its tradeoffs.
-    * A smarter way to organize this may be to create a data structure which organizes the templates in order of most to least populated states. Assuming a good picture, the common cases will be faster.
+    * A smarter way to organize this may be to use a data structure which organizes the templates in order of most to least accessed formats. Assuming a good picture, the common cases will be faster.
 * Template match was correct, but the image did not align correctly:
     * Make sure the template that you’re trying to use is as clean and clear as possible. High resolution, sharp details and even lighting are the gold standard for matching/alignment. 
     * Try adjusting GOOD_MATCH_PERCENT in the ScanID module. I got the best results with 15%-25%, but sometimes there are individual cases where lower or higher values produce better results.
