@@ -1,7 +1,7 @@
 # Document Scanner README
 
 ## Description
-This program was built to function as a scanner and reader which can process (currently) Texas and Oregon IDs. The program first identifies the document, using powerful image/template matching processes from the OpenCV python library. Once the program knows what kind of document it has, it will access its template for that document, align the input image to the blank template, and perform zonal OCR on the regions of the image that are expected to contain text after alignment. The text retrieved from the image is then assigned to an object for processing. Currently supports JPG and PNG files, with intent to add support for PDFs soon.
+This program was built to function as a scanner and reader which can process (currently) Texas and Oregon IDs. The program first identifies the document by using powerful image/template matching processes from the OpenCV python library. Once the program knows what kind of document it has, it will reference its template for that document, align the input image to the blank template, and perform zonal OCR on the regions of the image that are expected to contain text after alignment. The text retrieved from the image is then assigned to an object for processing. Currently supports JPG and PNG files, with intent to add support for PDFs soon.
 
 ## Requirements
 Use the package manager **pip** to install the necessary client libraries.
@@ -22,13 +22,13 @@ After installing the necessary client libraries, you will need to [enable the Cl
 ## Project Organization
 The project is separated into 4 modules:
 
-**Transform.py** - This module contains the functions that work to find the outline of the document, make sure the picture is oriented right side up and get a birds-eye-view. Accessed by ScanID when removeBackground() is called
+**Transform.py** - This module contains the functions that work to find the outline of the document, make sure the picture is oriented right side up and transform the selection into a birds-eye-view. Accessed by ScanID when entry point removeBackground() is called.
 
-**ScanID.py** - Acts as the driver, this module contains main and directs most of the workflow. Contains the functions that select and align the template, and when the program terminates, this module ends up with the object that was created.
+**ScanID.py** - Acts as the driver, this module contains main and directs most of the workflow. Contains the functions that select and align the template. When the program finishes, this is the module that ends up with the object that was created.
 
-**Document.py** - Class structure for the base class, Document, and its derived classes, License and SocialSecurity. Building the ID is delegated to the derived class constructors, but to build any generic document, the access point is to call the documentFromImage() function, which drives OCR and object creation calling various methods within this module.
+**Document.py** - Class structure for the base class, Document, and its derived classes, License and SocialSecurity. Building the ID is delegated to the derived class constructors, but to build any generic document, the access point is to call the documentFromImage() function, which drives OCR and object creation by calling various methods within this module.
 
-**TemplateData.py** - This module contains the data that gets referenced when an object is created, such as coordinates to expect information after the image is aligned to the template image, how the doc owner’s name is formatted, and driver’s license state/orientation (if applicable)
+**TemplateData.py** - This module contains the data that gets referenced when an object is created, such as coordinates to expect information after the image is aligned to the template image, how the owner's name is formatted, and driver’s license state/orientation (if applicable)
 
 Here is essentially a high-level workflow of the project:
 INSERT
