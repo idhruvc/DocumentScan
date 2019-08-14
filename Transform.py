@@ -32,7 +32,9 @@ def orderPoints(pts):
 
 
 #start of TransformFromPoints
-#	TODO
+#	This function expects an image as well as 4 points within the image. The function takes those 4 points
+#	and returns the cropped selection bounded by those 4 points so that it would appear that the new selection
+#	was taken from directly above the Document.
 def transformFromPoints(image, pts):
 	# obtain a consistent order of the points and unpack them
 	# individually
@@ -71,7 +73,7 @@ def transformFromPoints(image, pts):
 #end of transformFromPoints
 
 
-#start of removeBackground()
+#start of removeBackground
 #	This function is given an image and attempts to remove the background from the image. The function
 #	uses thresholding and contour approximation to estimate a rectangular bounding box and perform a 
 #	perspective warp to make the image appear as if it were taken from directly above the document.
@@ -96,14 +98,14 @@ def removeBackground(image):
 	element = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3), (1,1))
 	
 	#loop until the background is removed, adjusting gaussian blur settings each pass, with a maximum of
-	#7 passes. If the outline not found after 7 passes, original image is returned.
+	#5 passes. If the outline not found after 5 passes, original image is returned.
 	while background is True and i < 5:
 		edged = cv2.GaussianBlur(gray.copy(), (size, size), 0)
 		edged = cv2.Canny(edged, 0, 150)
 		edged = cv2.morphologyEx(edged, cv2.MORPH_CLOSE, element)
 		
 		#TODO remove -- image display for debug
-		cv2.imshow("Edged", imutils.resize(edged, height=500))
+		cv2.imshow("Edged", imutils.resize(edged, height=500))	
 		cv2.waitKey(0)
 		cv2.destroyAllWindows()
 		
@@ -149,10 +151,10 @@ def removeBackground(image):
 
 				for (x,y,w,h) in faces:
 					area = w * h
-					#if area of the face is any bigger than 1/3 of the image, the algorithm probably
+					#if area of the face is any bigger than 1/7 of the image, the algorithm probably
 					#recognized the rectangle bounding the person's picture, and returned it thinking
 					#it had found the outline of the ID..
-					if area > (temp.shape[0] * temp.shape[1] / 5):
+					if area > (temp.shape[0] * temp.shape[1] / 7):
 						raise Exception("Incorrect region selection.")
 					else:			
 						warped = temp
@@ -161,17 +163,28 @@ def removeBackground(image):
 			i += 1
 			size -= 2
 
-	#if loop terminates and outline not found, return original image
+	#if loop terminates and outline not found, return original image with as much neutral background removed as possible
 	if background is True:
 		faces, rotations = findFaces(orig)
 		for j in range(0, rotations):
 			orig = np.rot90(orig)
-		warped = orig
+
+		#Crop out whatever background we can find
+		gray = cv2.cvtColor(orig, cv2.COLOR_BGR2GRAY)
+		#heavy blur
+		gray = cv2.GaussianBlur(gray, (15,15), 1)
+		#threshold, invert so that background is white and objects are black
+		gray = 255*(gray < 128).astype(np.uint8)
+		#find the bounding points of the areas which are not part of the background
+		coords = cv2.findNonZero(gray)
+		x,y,w,h = cv2.boundingRect(coords)
+		#crop out background based on this rough estimate
+		warped = orig[y:y+h, x:x+w]
 	
 	#TODO remove -- image display for debug
-	cv2.imshow("Warped", imutils.resize(warped, height=500))
-	cv2.waitKey(0)
-	cv2.destroyAllWindows()	
+#	cv2.imshow("Warped", imutils.resize(warped, height=500))
+#	cv2.waitKey(0)
+#	cv2.destroyAllWindows()	
 
 	return warped, background
 #end of removeBorder
@@ -190,12 +203,12 @@ def findFaces(image):
 		copy = image.copy()
 		gray = cv2.cvtColor(copy, cv2.COLOR_BGR2GRAY)
 		#Now, generate a list of rectangles for all detected faces in the image.
-		faces = faceCascade.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=10, minSize=(35,35))
+		faces = faceCascade.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=12, minSize=(30,30))
 		#TODO remove the imshow
-		for (x,y,w,h) in faces:
-			cv2.rectangle(copy, (x,y), (x+w, y+h), (0,255,0), 2)
-		cv2.imshow("Face Detection", imutils.resize(copy, height=500))
-		cv2.waitKey(0)
+#		for (x,y,w,h) in faces:
+#			cv2.rectangle(copy, (x,y), (x+w, y+h), (0,255,0), 2)
+#		cv2.imshow("Face Detection", imutils.resize(copy, height=500))
+#		cv2.waitKey(0)
 			
 		if len(faces) >= 1:
 			return faces, i
@@ -213,7 +226,7 @@ def correctOrientation(image):
 	image = imutils.resize(image, height = 500)
 	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 	gray = cv2.GaussianBlur(gray, (3,3), 5)
-	#locate contours and features, this will be used to find the outline of the document
+	#locate contours and features, this will be used to approximate text
 	edged = cv2.Canny(gray, 0, 150)
 	element = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3), (1,1))
 	edged =	cv2.morphologyEx(edged, cv2.MORPH_CLOSE, element)
@@ -223,7 +236,7 @@ def correctOrientation(image):
 	numVert = 0
 	numHoriz = 0
 	
-	#Get the lines in the image, to find the orientation of the text in the image
+	#Approximate lines to find the orientation of the text in the image
 	lines = cv2.HoughLinesP(edged, 1, np.pi/180, 100, None, 20, 20)
 
 	if lines is not None:
@@ -236,16 +249,16 @@ def correctOrientation(image):
 			#if the angle is in the range [0,15] degrees or [165,180], it will be considered horizontal.
 			if (angle >= 0 and angle <= 15) or (angle >= 165 and angle <= 180):
 				numHoriz+=1
-				cv2.line(image, (l[0], l[1]), (l[2], l[3]), (0,255,0), 3) #TODO remove this line
+#				cv2.line(image, (l[0], l[1]), (l[2], l[3]), (0,255,0), 3) #TODO remove this line
 			#if the angle is in the range 90 +/- 15 degrees, it will be considered vertical
 			elif angle >= 75 and angle <= 105:
 				numVert+=1
-				cv2.line(image, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3) #TODO remove this
+#				cv2.line(image, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3) #TODO remove this
 			#else, the angle will be assumed to be a random line and will not be counted.
 	
 		#TODO remove till next comment -- debug stuff
-		cv2.imshow("Lines", image)
-		cv2.waitKey(0)
+#		cv2.imshow("Lines", image)
+#		cv2.waitKey(0)
 
 		#at the end of measuring each angle, check whether the image is made up of predominantly horiz. or vert.
 		#lines. This will tell us how text in the ID is oriented.

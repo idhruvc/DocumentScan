@@ -1,3 +1,7 @@
+#	This program functions as a document scanner and reader. It expects input to be passed in to the program
+#	in the form of a jpg or png filetype. The program will identify what kind of document has been submitted and
+#	read in its info, then assign the data to an object for further processing.
+ 
 import imutils
 import os
 import cv2
@@ -7,14 +11,13 @@ import Transform as transform
 import numpy as np
 
 # TODO -- GOALS -- TODO
-# 1. Better Template - check?
 # 2. Improve background removal step - check?
-# 3. Improve OCR - IN PROGRESS
 # 4. Improve Alignment - check?
 # 5. Improve Pre-Screen - next
 
 #global variable declaration
 GOOD_MATCH_PERCENT = .15
+#***SET SRC_PATH TO THE PARENT DIRECTORY OF THE /Templates/ FOLDER***
 SRC_PATH = "/Users/ngover/Documents/TestPrograms/Images/"
 BLUR_THRESHOLD = 36
 DARKNESS_THRESHOLD = 50
@@ -134,8 +137,6 @@ def selectTemplate(img, background, location=SRC_PATH+"Templates/"):
 	#the .jpg or .png extension.
 	form = multiScaleTemplateSelect(img, location, background).split('.')[0]
 
-#	print("Searching " + form + " directory...")	
-	
 	#update location to be the subdirectory containing all of the images for the specified form
 	location = location + form + "/"
 	#update form so that it will contain the filename and orientation if orientation was already determined
@@ -149,7 +150,7 @@ def selectTemplate(img, background, location=SRC_PATH+"Templates/"):
 	#if the first two branches of elif fail, then the file does not exist, that means one of 3 cases:
 	#1. outline of document was not found to assign a vertical or horizontal orientation
 	#2. outline found, but there are multiple forms of the document with the determined orientation
-	#3. (most unlikely) false positive match to the state/template occurred in the first loop
+	#3. false positive match to the state/template occurred in the first call to multiScaleTemplateSelect
 	elif background is True:
 		#Folder will have a /Features subdirectory if there is more than one form of the doctype
 		if os.path.exists(location + "Features/"):
@@ -253,21 +254,17 @@ def alignToTemplate(img, template):
 	#image prep to improve OCR and alignment
 	imgClean = cleanImage(img)
 	templateClean = cleanImage(template)
-	
 	# Detect image keypoints & descriptors using the BRISK algorithm
 	brisk = cv2.BRISK_create()
 	imgKeypoints, imgDescriptors = brisk.detectAndCompute(imgClean, None)
 	templateKeypoints, templateDescriptors = brisk.detectAndCompute(templateClean, None)
-	
 	# Match corresponding features between the images
 	descriptorMatcher = cv2.DescriptorMatcher_create(cv2.DESCRIPTOR_MATCHER_BRUTEFORCE_HAMMING)
 	matches = descriptorMatcher.match(imgDescriptors, templateDescriptors, None)
-	
 	# Sort matches by score, and we only want to care about the best x% of matches.
 	matches.sort(key=lambda m: m.distance, reverse=False)
 	numGoodMatches = int(len(matches) * GOOD_MATCH_PERCENT)
-	matches = matches[:numGoodMatches]
-	
+	matches = matches[:numGoodMatches]	
 	# Pull the coordinates of the best matches
 	imgPoints = np.zeros((len(matches), 2), dtype=np.float32)
 	templatePoints = np.zeros((len(matches), 2), dtype=np.float32)
@@ -276,14 +273,65 @@ def alignToTemplate(img, template):
 		imgPoints[i,:] = imgKeypoints[match.queryIdx].pt
 		templatePoints[i,:] = templateKeypoints[match.trainIdx].pt
 	
-	# find homography
-	h, mask = cv2.findHomography(imgPoints, templatePoints, cv2.RANSAC)
+	# find homography matrix
+	h, _ = cv2.findHomography(imgPoints, templatePoints, cv2.RANSAC)
+
+	# make sure calculated matrix doesn't attempt to perform an invalid warp
+	if checkHomography(h, img.shape[1], img.shape[0]) is False:
+		print("Invalid results. Please try re-submitting.")	
+		sys.exit(0)
 	
 	# apply homography, warping the image to appear as if it were directly below the camera.
 	height, width, channels = template.shape
 	imgAligned = cv2.warpPerspective(img, h, (width, height))
 	return imgAligned
 #end of alignToTemplate
+
+
+#start of checkHomography
+#	This function does a basic check to see if homography matrix will be valid. This function checks 4 points 
+#	(top left, top right, bottom right, bottom left) which will be arranged clockwise. After multiplying these points
+#	by the homography, the function checks if points have preserved their clockwise order, as we would expect them to.
+#	This should not be seen as the universal indicator of a good homography, just a simple intermediate step which will
+#	help weed out some bad results. Takes a 3x3 matrix, returns a boolean where false is a bad homography, true means that
+#	we couldn't find an issue  with the homography.
+def checkHomography(h, imWidth, imHeight):
+	#initialize each point as a matrix.
+	a = np.array([0,0,1]) # top L
+	b = np.array([imWidth,0,1]) # top R
+	c = np.array([imWidth,imHeight,1]) # bottom R
+	d = np.array([0,imHeight,1]) # bottom L
+	#multiply each point by the homography, store the points the transformation produced
+	warped = np.array([h.dot(a)[:2], h.dot(b)[:2], h.dot(c)[:2], h.dot(d)[:2]])
+	#call to orderPoints, which orders a set of 4 points such that the top left is at index 0, top right is at index 1, etc.
+	ordered = transform.orderPoints(warped)
+	#match points to each other after ordering the new points clockwise. The clockwise order SHOULD be conserved.
+	start = warped[0]
+	j = 0
+	for point in ordered:
+		if isclose(start[0],point[0]) and isclose(start[1], point[1]):
+			break
+		else:
+			j += 1
+	#first loop breaks when the corresponding element in the ordered array is found
+	#next, walk through array, check that order is preserved
+	for i in range(0,4):
+		if j > 3:
+			j = 0
+		if isclose(warped[i][0], ordered[j][0]) and isclose(warped[i][1], ordered[j][1]):
+			j += 1
+		else:
+			return False
+	return True
+#end of checkHomography()
+
+
+#start of isclose()
+#	this function is provided in a later version of python, this serves as the equivalent. Checks two floating point values
+#	for 'almost' equality, where rel_tol and abs_tol are the tolerances above which we will say that the values are unequal.
+def isclose(a,b,rel_tol=.1,abs_tol=0.0):
+	return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
+#end of isclose()
 
 
 #start of drawBoxes

@@ -56,8 +56,8 @@ class OR_H2:
 class OR_H:
 	state = "OREGON"
 	orientation = "HORIZONTAL"
-	dob = ((532, 306), (699, 344))
-	name = ((59, 525), (798, 568))
-	address = ((59, 560), (798, 655))
-	expiration = ((849, 194), (1050, 239))
+	dob = ((700, 406), (941, 460))
+	name = ((27, 727), (793, 777))
+	address = ((27, 777), (800, 907))
+	expiration = ((1159,252), (1450, 315))
 	nameFormat = 2
