@@ -51,9 +51,10 @@ python ScanID.py /your/image/path/here
 
 #### Tips for submitting test images:
 * Use clean, clear, well-lit images that capture the entire document without cutting off any corners or edges. 
-* Use images with minimal glare. If the text is too blurry or glared, OCR will have a tough time.
+* Use images with minimal glare.
 * Use pictures taken from directly above with minimal skew.
-* Only use images with the ID laid down on a flat surface, optimally against a background that contrasts with the ID.
+* Only use images with the ID laid down on a flat surface, optimally against a uniform background that contrasts with the color of the ID.
+* Try to make sure the background contains minimal or no objects or odd textures - these make it harder to locate the outline of an identification document.
 * Try to avoid images where someone is holding their ID in their hand, these are difficult to get good results with because it is much harder to find and isolate a rectangular selection when someone's fingers interfere with the contour.
 
 ## Help for Future Development/Troubleshooting:
