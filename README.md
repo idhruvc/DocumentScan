@@ -38,7 +38,7 @@ The project expects template data to be organized hierarchically, as shown:
 INSERT
 This makes exploring subdirectories and examining individual features of different documents and forms organized.
 
-Before running, change the SRC_PATH variable in the ScanID.py module to the absolute path to the parent directory of the /Templates/ folder.
+Before running, change the SRC_PATH variable in the ScanID.py module to the absolute path to the /Templates/ folder.
 
 After this, open a command line environment, and enter one of the following commands to execute. The program only takes one argument, which should be the path to the image you want to pass into the program. You can choose to include or exclude the file extension. Program has the option to leave off the file extension for convenience. Example:
 ```bash
