@@ -55,7 +55,7 @@ python ScanID.py /your/image/path/here
 * Use pictures taken from directly above, it helps a lot to get the picture right-side up with minimal skew.
 * Only use images with the ID laid down on a flat surface, optimally against a uniform background that contrasts with the color of the ID.
 * Try to make sure the background contains minimal or no objects or odd textures - these make it harder to locate the outline of an identification document.
-* Try to avoid images where someone is holding their ID in their hand, these are usually difficult to get good results with because it is much harder to find and isolate a driver's license because often, fingers interfere with the straight line contour or cover parts of the card.
+* Try to avoid images where someone is holding their ID in their hand, these images are usually difficult to get good results with because fingers make it much harder to find and isolate the outline of the license since they can interfere with the straight line contour or cover parts of the card.
 
 ## Help for Future Development/Troubleshooting:
 #### Tips for adding templates:
