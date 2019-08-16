@@ -1,6 +1,7 @@
 #	This program functions as a document scanner and reader. It expects input to be passed in to the program
 #	in the form of a jpg or png filetype. The program will identify what kind of document has been submitted and
 #	read in its info, then assign the data to an object for further processing.
+
  
 import imutils
 import os
@@ -9,25 +10,15 @@ import sys
 import Document as document
 import Transform as transform
 import numpy as np
+import Config as config
 
-# TODO -- GOALS -- TODO
-# 2. Improve background removal step - check?
-# 4. Improve Alignment - check?
-# 5. Improve Pre-Screen - next
-
-#global variable declaration
-GOOD_MATCH_PERCENT = .15
-#***SET SRC_PATH TO THE PARENT DIRECTORY OF THE /Templates/ FOLDER***
-SRC_PATH = "/Users/ngover/Documents/TestPrograms/Images/"
-BLUR_THRESHOLD = 36
-DARKNESS_THRESHOLD = 50
 
 #start of main
-#	This function serves as a driver, first by calling the function to match the image to the best template,
-#	then aligning the image to the template, then pulling the data from the ID by referencing the location
-#	of the bounding boxes which are expected to contain the text we are interested in.
+#	This function serves as a driver by passing images into various methods and modules, and directing the
+#	responses into the correct modules and functions. Returns an object for the respective doctype that holds
+#	the data found in the image.
 def main():
-	fullPath = SRC_PATH + "Samples/" + sys.argv[1]
+	fullPath = sys.argv[1]
 	
 	#add file extension if the entry did not already have it.
 	if fullPath.endswith(".png") or fullPath.endswith(".jpg") or fullPath.endswith(".jpeg"):
@@ -60,22 +51,14 @@ def main():
 		print("Image quality too low, try retaking.")
 		sys.exit(0)
 
-	#search for best template match, image stored in template, the name of the template stored in docType
+	#search for best template match, image object assigned to the template variable, template name stored in docType
 	template, docType = selectTemplate(imgNoBackground, background)
 	#line up the input image with the selected template so that the data will be exactly where we expect
 	imgAligned = alignToTemplate(img, template)
-	#call to the document constructor, which will set up the object and read ROIs based on the info. passed
+	#call to the document 'constructor', which will set up the object and read ROIs based on the info. passed
 	myDoc = document.documentFromImage(imgAligned, docType)
 	#call to object's toString() method.
 	print("\n" + myDoc.__str__())
-		
-	#TODO remove -- display for debugging/testing
-#	cv2.imshow("Original", imutils.resize(img, height=500))
-#	cv2.imshow("Template Selection", imutils.resize(template, height=500))
-#	cv2.imshow("Original Aligned to Template", imutils.resize(drawBoxes(imgAligned, docType), height=500))
-#	cv2.waitKey(0)
-#	cv2.destroyAllWindows()
-
 	return myDoc
 #end of main
 
@@ -92,7 +75,7 @@ def preScreen(img):
 #	print("Focus measure: {}".format(focusMeasure))
 	
 	#check whether the value is above or beneath the threshold for blur
-	if focusMeasure < BLUR_THRESHOLD:
+	if focusMeasure < config.BLUR_THRESHOLD:
 		return False
 
 	#measure the mean darkness level for the image
@@ -101,7 +84,7 @@ def preScreen(img):
 
 #	print("Darkness level: {}".format(light))	
 
-	if light < DARKNESS_THRESHOLD:
+	if light < config.DARKNESS_THRESHOLD:
 		return False
 
 	return True
@@ -116,7 +99,7 @@ def preScreen(img):
 #	function checks whether it has enough information to identify the document it has. If it does, it returns the template and
 #	the corresponding name of the template. If it does not, it performs a secondary search which looks for unique identifiers
 #	for each derived form of the document, then returns the best match.
-def selectTemplate(img, background, location=SRC_PATH+"Templates/"):
+def selectTemplate(img, background, location=config.SRC_PATH):
 	h,w = img.shape[:2]
 	orientation = ""
 
@@ -128,10 +111,6 @@ def selectTemplate(img, background, location=SRC_PATH+"Templates/"):
 			orientation = "_V"
 		elif w > h: #document is horizontal
 			orientation = "_H"
-
-	#TODO remove this -- for debug
-#	cv2.imshow("Corrected", imutils.resize(img, height=500))
-#	cv2.waitKey(0)
 
 	#Get the filename of the format that had the best match in the input image. the split() function gives the name of the file without
 	#the .jpg or .png extension.
@@ -185,8 +164,7 @@ def multiScaleTemplateSelect(img, location, background):
 	grayImg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 	grayImg = cv2.GaussianBlur(grayImg, (3,3), 0)
 	
-	#if background has NOT been removed yet, increase scale of the image, we will have more space to search. If the background
-	#is already removed, we don't have to resize, the algorithm will run quicker.
+	#resize to help the algorithm run faster
 	if grayImg.shape[0] > grayImg.shape[1]: #if height > width
 		grayImg = imutils.resize(grayImg, height=500)
 	elif grayImg.shape[1] > grayImg.shape[0]:
@@ -207,8 +185,6 @@ def multiScaleTemplateSelect(img, location, background):
 			grayTemplate = cv2.GaussianBlur(grayTemplate, (1,1), 0)
 			(tH, tW) = template.shape[:2]
 
-			bestStateScore = 0 # TODO remove -- debug			
-
 			#Loops through 30 different scaled images in the range from 100% to 10% the image's size.
 			for scale in np.linspace(0.1, 1.0, 30)[::-1]:
 				resized = imutils.resize(grayImg, width=int(grayImg.shape[1] * scale))
@@ -225,18 +201,13 @@ def multiScaleTemplateSelect(img, location, background):
 				result = cv2.matchTemplate(edgedImg, edgedTemplate, cv2.TM_CCORR_NORMED)
 				minScore,maxScore,_,_ = cv2.minMaxLoc(result)	
 					
-				#TODO TODO TODO remove this if block -- debug
-				if maxScore > bestStateScore:
-					bestStateScore = maxScore
-
 				if maxScore > bestScore:
 					bestScore = maxScore
 					bestMatch = filename
 					#more than a 50% match is a pretty good match. This is to save time on the search.
 					if maxScore > 0.5:
-#						print("BEST MATCH: {}, SCORE: {},".format(bestMatch,bestScore))
+#						print("BEST MATCH: {}, SCORE: {},".format(bestMatch,bestScore)) #TODO remove -- debug
 						return bestMatch
-#			print("FILE: {}, SCORE: {}".format(filename, bestStateScore)) #TODO remove this
 
 #	print("BEST MATCH: {}, SCORE: {}".format(bestMatch, bestScore)) #TODO remove-- this was for debug
 	return bestMatch
@@ -263,7 +234,7 @@ def alignToTemplate(img, template):
 	matches = descriptorMatcher.match(imgDescriptors, templateDescriptors, None)
 	# Sort matches by score, and we only want to care about the best x% of matches.
 	matches.sort(key=lambda m: m.distance, reverse=False)
-	numGoodMatches = int(len(matches) * GOOD_MATCH_PERCENT)
+	numGoodMatches = int(len(matches) * config.GOOD_MATCH_PERCENT)
 	matches = matches[:numGoodMatches]	
 	# Pull the coordinates of the best matches
 	imgPoints = np.zeros((len(matches), 2), dtype=np.float32)
@@ -296,16 +267,16 @@ def alignToTemplate(img, template):
 #	help weed out some bad results. Takes a 3x3 matrix, returns a boolean where false is a bad homography, true means that
 #	we couldn't find an issue  with the homography.
 def checkHomography(h, imWidth, imHeight):
-	#initialize each point as a matrix.
+	#initialize each point as a 1x3 matrix (so that it can be multiplied by the 3x3 homography).
 	a = np.array([0,0,1]) # top L
 	b = np.array([imWidth,0,1]) # top R
 	c = np.array([imWidth,imHeight,1]) # bottom R
 	d = np.array([0,imHeight,1]) # bottom L
 	#multiply each point by the homography, store the points the transformation produced
 	warped = np.array([h.dot(a)[:2], h.dot(b)[:2], h.dot(c)[:2], h.dot(d)[:2]])
-	#call to orderPoints, which orders a set of 4 points such that the top left is at index 0, top right is at index 1, etc.
+	#call to orderPoints, which orders a set of 4 points clockwise starting with the Top Left point at index 0
 	ordered = transform.orderPoints(warped)
-	#match points to each other after ordering the new points clockwise. The clockwise order SHOULD be conserved.
+	#now, we'd expect that even though the warped array may start on a different element, the order should not have changed.
 	start = warped[0]
 	j = 0
 	for point in ordered:
@@ -313,11 +284,12 @@ def checkHomography(h, imWidth, imHeight):
 			break
 		else:
 			j += 1
-	#first loop breaks when the corresponding element in the ordered array is found
-	#next, walk through array, check that order is preserved
+	#first loop breaks when the start index in the ordered array is found
+	#next, walk through both arrays array, check that order is the same.
 	for i in range(0,4):
 		if j > 3:
 			j = 0
+		#check the two points for 'close to' equality to account for rounding errors.
 		if isclose(warped[i][0], ordered[j][0]) and isclose(warped[i][1], ordered[j][1]):
 			j += 1
 		else:
@@ -329,7 +301,7 @@ def checkHomography(h, imWidth, imHeight):
 #start of isclose()
 #	this function is provided in a later version of python, this serves as the equivalent. Checks two floating point values
 #	for 'almost' equality, where rel_tol and abs_tol are the tolerances above which we will say that the values are unequal.
-def isclose(a,b,rel_tol=.1,abs_tol=0.0):
+def isclose(a,b,rel_tol=.05,abs_tol=0.0):
 	return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
 #end of isclose()
 

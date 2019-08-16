@@ -3,75 +3,6 @@ import numpy as np
 import imutils
 import math
 
-#start of OrderPoints
-#	This function orders the points in a list such that the first entry is the top left, the second
-#	is the top right, third is the bottom right, and fourth is the bottom left.
-def orderPoints(pts):
-	# initialzie a list of coordinates that will be ordered
-	# such that the first entry in the list is the top-left,
-	# the second entry is the top-right, the third is the
-	# bottom-right, and the fourth is the bottom-left
-	rect = np.zeros((4, 2), dtype = "float32")
- 
-	# the top-left point will have the smallest sum, whereas
-	# the bottom-right point will have the largest sum
-	s = pts.sum(axis = 1)
-	rect[0] = pts[np.argmin(s)]
-	rect[2] = pts[np.argmax(s)]
- 
-	# now, compute the difference between the points, the
-	# top-right point will have the smallest difference,
-	# whereas the bottom-left will have the largest difference
-	diff = np.diff(pts, axis = 1)
-	rect[1] = pts[np.argmin(diff)]
-	rect[3] = pts[np.argmax(diff)]
- 
-	# return the ordered coordinates
-	return rect
-#end of orderPoints
-
-
-#start of TransformFromPoints
-#	This function expects an image as well as 4 points within the image. The function takes those 4 points
-#	and returns the cropped selection bounded by those 4 points so that it would appear that the new selection
-#	was taken from directly above the Document.
-def transformFromPoints(image, pts):
-	# obtain a consistent order of the points and unpack them
-	# individually
-	boundingBox = orderPoints(pts)
-	
-	(topL, topR, bottomR, bottomL) = boundingBox
- 
-	# compute the width of the new image, which will be the
-	# maximum distance between bottom-right and bottom-left
-	# x-coordiates or the top-right and top-left x-coordinates
-	bottomWidth = np.sqrt(((bottomR[0] - bottomL[0]) ** 2) + ((bottomR[1] - bottomL[1]) ** 2))
-	topWidth = np.sqrt(((topR[0] - topL[0]) ** 2) + ((topR[1] - topL[1]) ** 2))
-	maxWidth = max(int(bottomWidth), int(topWidth))
- 
-	# compute the height of the new image, which will be the
-	# maximum distance between the top-right and bottom-right
-	# y-coordinates or the top-left and bottom-left y-coordinates
-	heightR = np.sqrt(((topR[0] - bottomR[0]) ** 2) + ((topR[1] - bottomR[1]) ** 2))
-	heightL = np.sqrt(((topL[0] - bottomL[0]) ** 2) + ((topL[1] - bottomL[1]) ** 2))
-	maxHeight = max(int(heightR), int(heightL))
- 
-	# now that we have the dimensions of the new image, construct
-	# the set of destination points to obtain a "birds eye view",
-	# (i.e. top-down view) of the image, again specifying points
-	# in the top-left, top-right, bottom-right, and bottom-left
-	# order
-	topView = np.array([[0, 0], [maxWidth - 1, 0], [maxWidth - 1, maxHeight - 1],
-		[0, maxHeight - 1]], dtype = "float32")
- 
-	# compute the perspective transform matrix and then apply it
-	transformMatrix = cv2.getPerspectiveTransform(boundingBox, topView)
-	warped = cv2.warpPerspective(image, transformMatrix, (maxWidth, maxHeight))
- 
-	# return the warped image
-	return warped
-#end of transformFromPoints
-
 
 #start of removeBackground
 #	This function is given an image and attempts to remove the background from the image. The function
@@ -105,9 +36,9 @@ def removeBackground(image):
 		edged = cv2.morphologyEx(edged, cv2.MORPH_CLOSE, element)
 		
 		#TODO remove -- image display for debug
-		cv2.imshow("Edged", imutils.resize(edged, height=500))	
-		cv2.waitKey(0)
-		cv2.destroyAllWindows()
+#		cv2.imshow("Edged", imutils.resize(edged, height=500))	
+#		cv2.waitKey(0)
+#		cv2.destroyAllWindows()
 		
 		#locate contours and features, this will be used to find the outline of the document
 		cnts = cv2.findContours(edged.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
@@ -187,7 +118,77 @@ def removeBackground(image):
 #	cv2.destroyAllWindows()	
 
 	return warped, background
-#end of removeBorder
+#end of removeBackground
+
+
+#start of TransformFromPoints
+#	This function expects an image as well as 4 points within the image. The function takes those 4 points
+#	and returns the cropped selection bounded by those 4 points so that it would appear that the new selection
+#	was taken from directly above the Document.
+def transformFromPoints(image, pts):
+	# obtain a consistent order of the points and unpack them
+	# individually
+	boundingBox = orderPoints(pts)
+	
+	(topL, topR, bottomR, bottomL) = boundingBox
+ 
+	# compute the width of the new image, which will be the
+	# maximum distance between bottom-right and bottom-left
+	# x-coordiates or the top-right and top-left x-coordinates
+	bottomWidth = np.sqrt(((bottomR[0] - bottomL[0]) ** 2) + ((bottomR[1] - bottomL[1]) ** 2))
+	topWidth = np.sqrt(((topR[0] - topL[0]) ** 2) + ((topR[1] - topL[1]) ** 2))
+	maxWidth = max(int(bottomWidth), int(topWidth))
+ 
+	# compute the height of the new image, which will be the
+	# maximum distance between the top-right and bottom-right
+	# y-coordinates or the top-left and bottom-left y-coordinates
+	heightR = np.sqrt(((topR[0] - bottomR[0]) ** 2) + ((topR[1] - bottomR[1]) ** 2))
+	heightL = np.sqrt(((topL[0] - bottomL[0]) ** 2) + ((topL[1] - bottomL[1]) ** 2))
+	maxHeight = max(int(heightR), int(heightL))
+ 
+	# now that we have the dimensions of the new image, construct
+	# the set of destination points to obtain a "birds eye view",
+	# (i.e. top-down view) of the image, again specifying points
+	# in the top-left, top-right, bottom-right, and bottom-left
+	# order
+	topView = np.array([[0, 0], [maxWidth - 1, 0], [maxWidth - 1, maxHeight - 1],
+		[0, maxHeight - 1]], dtype = "float32")
+ 
+	# compute the perspective transform matrix and then apply it
+	transformMatrix = cv2.getPerspectiveTransform(boundingBox, topView)
+	warped = cv2.warpPerspective(image, transformMatrix, (maxWidth, maxHeight))
+ 
+	# return the warped image
+	return warped
+#end of transformFromPoints
+
+
+#start of OrderPoints
+#	This function orders the points in a list such that the first entry is the top left, the second
+#	is the top right, third is the bottom right, and fourth is the bottom left.
+def orderPoints(pts):
+	# initialzie a list of coordinates that will be ordered
+	# such that the first entry in the list is the top-left,
+	# the second entry is the top-right, the third is the
+	# bottom-right, and the fourth is the bottom-left
+	rect = np.zeros((4, 2), dtype = "float32")
+ 
+	# the top-left point will have the smallest sum, whereas
+	# the bottom-right point will have the largest sum
+	s = pts.sum(axis = 1)
+	rect[0] = pts[np.argmin(s)]
+	rect[2] = pts[np.argmax(s)]
+ 
+	# now, compute the difference between the points, the
+	# top-right point will have the smallest difference,
+	# whereas the bottom-left will have the largest difference
+	diff = np.diff(pts, axis = 1)
+	rect[1] = pts[np.argmin(diff)]
+	rect[3] = pts[np.argmax(diff)]
+ 
+	# return the ordered coordinates
+	return rect
+#end of orderPoints
 
 
 #start of findFaces()

@@ -7,7 +7,6 @@ import io
 from google.cloud import vision
 import os
 
-
 #start of Document base class
 class Document:
 	templateName = ''
@@ -71,9 +70,10 @@ class License(Document):
 		#temp write to disk before requesting Cloud Vision API
 		tempFile = "/Users/ngover/Documents/TestPrograms/DocumentScan/test.png"
 		cv2.imwrite(tempFile, combined)
-		
-		cv2.imshow("Combined", imutils.resize(combined, height=700))
-		cv2.waitKey(0)		
+
+#		TODO remove -- debug		
+#		cv2.imshow("Combined", imutils.resize(combined, height=700))
+#		cv2.waitKey(0)		
 		
 		#create API request
 		client = vision.ImageAnnotatorClient()
