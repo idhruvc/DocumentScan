@@ -1,7 +1,7 @@
-# Document Scanner README
+# README
 
 ## Description
-This program was built to function as a scanner and reader which can process (currently) Texas and Oregon IDs. The program first identifies the document by using powerful image/template matching processes from the OpenCV python library. Once the program knows what kind of document it has, it will reference its template for that document, align the input image to the blank template, and perform zonal OCR on the regions of the image that are expected to contain text after alignment. The text retrieved from the image is then assigned to an object for processing. Currently supports JPG and PNG files, with intent to add support for PDFs soon.
+This program was built to function as a document scanner and reader which can process (currently) Texas and Oregon IDs. The program first identifies the document by using powerful image/template matching processes from the OpenCV python library. Once the program knows what kind of document it has, it will reference its template for that document, align the input image to the blank template, and perform zonal OCR on the regions of the image that are expected to contain text after alignment. The text retrieved from the image is then assigned to an object for processing. Currently supports JPG and PNG files, with intent to add support for PDFs soon.
 
 ## Project Organization
 The project is separated into 5 modules:
@@ -27,7 +27,7 @@ pip install opencv-contrib-python
 pip install imutils
 pip install numpy
 pip install unidecode
-pip install —upgrade google-cloud-vision
+pip install -—upgrade google-cloud-vision
 ```
 NOTE: if you are running the Tesseract OCR branch of the project you will also need the pytesseract library.
 ```bash
@@ -49,6 +49,8 @@ python ScanID.py /your/image/path/here.png
 python ScanID.py /your/image/path/here
 ```
 
+Output should look like [this](https://imgur.com/2GQRtYo)
+
 #### Tips for submitting test images:
 * Use clean, clear, well-lit images that capture the entire document without cutting off any corners or edges. 
 * Use images with minimal glare.
@@ -56,6 +58,42 @@ python ScanID.py /your/image/path/here
 * Only use images with the ID laid down on a flat surface, optimally against a uniform background that contrasts with the color of the ID.
 * Try to make sure the background contains minimal or no objects or odd textures - these make it harder to locate the outline of an identification document.
 * Try to avoid images where someone is holding their ID in their hand, these are difficult to get good results with because it is much harder to find and isolate a rectangular selection when someone's fingers interfere with the contour.
+
+## Test Parameters/Results
+* For the test set of ~70 IDs (Mostly from Texas)
+* Prototpye has the best templates and results for Texas IDs
+  * However, you're able to add more templates.
+* An image that was discarded for quality is not included in the test set for the steps it did not reach.
+* [Test Result Spreadsheet](https://imgur.com/dUfLqPn)
+
+##### Background Remove - 74.6%
+* Success (1):
+    * Background successfully removed or correct selection returned
+* Fail (0):
+    * Background not removed or incorrect selection returned
+##### Document Identification - 84.9% 
+* Success(1):
+    * Correct template identified
+* Partial(0.5):
+    * Correct state, incorrect format
+* Fail(0):
+    * Incorrect State
+##### Template Align/Extraction - 76.2%
+* Success(1):
+    * All text boxes correctly lined up
+* Fail(0):
+    * One or more text boxes did not correctly capture the fields we needed.
+##### OCR - 77.4% (GCP), 63% (Tesseract)
+For *each* field:
+* Success(1):
+    * Text response matched exactly, character-for-character what we expected
+* Fail(0):
+    * Text response did not match the expected output.
+##### Perfect Response - 73% (GCP), 40% (Tesseract)
+* Success(1):
+    * ALL OCR fields for a document were read with an exact string match
+* Fail(0):
+    * One or more fields did not match expected output.
 
 ## Help for Future Development/Troubleshooting:
 #### Tips for adding templates:
