@@ -31,7 +31,7 @@ class TX_V:
 	orientation = "VERTICAL"
 	dob = ((1320, 1565), (2200, 1725))
 	name = ((169, 2310), (2095, 2552))
-        address = ((171, 2679), (1749, 2874))
+	address = ((171, 2679), (1749, 2874))
 	expiration = ((1390, 2115), (2200, 2310))
 	nameFormat = 3
 
