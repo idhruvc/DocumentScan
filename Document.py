@@ -121,7 +121,7 @@ class License(Document):
 	def __str__(self):
 		temp = ''
 		temp = temp + 'TYPE:\t' + self.category + '\n'
-        	temp = temp + 'STATE:\t' + self.state + '\n'
+		temp = temp + 'STATE:\t' + self.state + '\n'
 		temp = temp + 'ORIEN:\t' + self.orientation + '\n'
 		temp = temp + 'FIRST:\t' + self.first + '\n'
 		temp = temp + 'LAST:\t' + self.last + '\n'
